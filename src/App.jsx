@@ -530,7 +530,7 @@ function DashboardTab({ operations, invoices }) {
 }
 
 /* ============================= OPERATIONS TAB ============================= */
-function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEndDate }) {
+function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEndDate, isAdmin }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState("");
@@ -620,7 +620,20 @@ function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEn
                           {!o.facturee ? (
                             <>
                               <button title="Modifier" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.steel }}><Pencil size={14} /></button>
-                              <button title="Supprimer" onClick={() => onDelete(o.id)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}><Trash2 size={14} /></button>
+                              <button
+                                title="Supprimer"
+                                onClick={() => { if (window.confirm(`Supprimer l'opération ${o.numeroConteneur} ?`)) onDelete(o.id); }}
+                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
+                              ><Trash2 size={14} /></button>
+                            </>
+                          ) : isAdmin ? (
+                            <>
+                              <button title="Modifier (admin — facture déjà émise)" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.amber }}><Pencil size={14} /></button>
+                              <button
+                                title="Supprimer (admin — facture déjà émise)"
+                                onClick={() => { if (window.confirm(`Cette opération est déjà facturée (${o.factureNumero}). La supprimer quand même ?`)) onDelete(o.id); }}
+                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
+                              ><Trash2 size={14} /></button>
                             </>
                           ) : (
                             <span title="Verrouillée (déjà facturée)" style={{ color: C.inkMuted }}><Lock size={14} /></span>
@@ -1124,7 +1137,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
 }
 
 /* ============================= INVOICES TAB ============================= */
-function InvoicesTab({ invoices, settings }) {
+function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
 
@@ -1173,14 +1186,28 @@ function InvoicesTab({ invoices, settings }) {
                 <td className="px-3 py-2">{inv.lines.length}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(inv.totals.ttc)}</td>
                 <td className="px-3 py-2">
-                  <button
-                    title="Aperçu"
-                    onClick={() => setActive(inv)}
-                    className="p-1.5 rounded hover:opacity-70"
-                    style={{ color: C.invoiceBlue }}
-                  >
-                    <Eye size={16} />
-                  </button>
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      title="Aperçu"
+                      onClick={() => setActive(inv)}
+                      className="p-1.5 rounded hover:opacity-70"
+                      style={{ color: C.invoiceBlue }}
+                    >
+                      <Eye size={16} />
+                    </button>
+                    {isAdmin && (
+                      <button
+                        title="Supprimer la facture (admin)"
+                        onClick={() => {
+                          if (window.confirm(`Supprimer la facture ${inv.numero} ? Les opérations liées redeviendront non facturées.`)) onDelete(inv.id);
+                        }}
+                        className="p-1.5 rounded hover:opacity-70"
+                        style={{ color: C.red }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1372,6 +1399,21 @@ export default function App() {
     setTab("invoices");
   };
 
+  // Admin-only: deleting an invoice frees up its operations so they can be re-invoiced.
+  const deleteInvoice = async (invoiceId) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return;
+    const opIds = inv.lines.map((l) => l.opId);
+    const nextOps = operations.map((o) => (opIds.includes(o.id) ? { ...o, facturee: false, factureId: null, factureNumero: null } : o));
+    const nextInvoices = invoices.filter((i) => i.id !== invoiceId);
+    setOperations(nextOps); setInvoices(nextInvoices);
+    await Promise.all([
+      saveKey("ceva-operations", nextOps),
+      saveKey("ceva-invoices", nextInvoices),
+    ]);
+    notify(`Facture ${inv.numero} supprimée`);
+  };
+
   const tabs = [
     { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { key: "operations", label: "Opérations", icon: ClipboardList },
@@ -1383,6 +1425,7 @@ export default function App() {
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [session, setSession] = useState(undefined); // undefined = checking, null = logged out, object = logged in
+  const isAdmin = session?.user?.user_metadata?.role === "admin";
 
   useEffect(() => {
     if (!supabase) { setSession(null); return; }
@@ -1435,6 +1478,9 @@ export default function App() {
                 <t.icon size={14} /> {t.label}
               </button>
             ))}
+            {isAdmin && (
+              <span className="px-2 py-1 rounded-md text-xs font-bold ml-1" style={{ background: C.amberSoft, color: C.amber }}>Admin</span>
+            )}
             <button
               title={session?.user?.email}
               onClick={() => supabase.auth.signOut()}
@@ -1473,9 +1519,9 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
-        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} />}
+        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} />}
-        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} />}
+        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} />}
       </div>
