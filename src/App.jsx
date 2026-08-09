@@ -878,7 +878,7 @@ function InvoiceDocument({ invoice, settings }) {
       className="rounded-xl overflow-hidden"
       style={{
         background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(30,58,138,0.10)",
-        display: "flex", flexDirection: "column", minHeight: 1050, // ~A4 portrait ratio at this content width
+        display: "flex", flexDirection: "column", aspectRatio: "210 / 297", // exact A4 portrait ratio
       }}
     >
       <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.invoiceBlue})` }} />
@@ -1000,7 +1000,7 @@ async function invoiceNodeToPdfBlob(node) {
   let position = 0;
   pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
-  while (heightLeft > 0) {
+  while (heightLeft > 2) { // small tolerance: ignore sub-pixel overflow so it doesn't spawn a near-empty extra page
     position -= pageHeight;
     pdf.addPage();
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
