@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
   Download, X, Check, Filter, AlertTriangle, MapPin, Truck, ChevronDown,
-  Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut
+  Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut,
+  UploadCloud, CheckCircle2
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { loadKey, saveKey, supabaseConfigured, supabase } from "./storage";
@@ -866,179 +869,223 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
 
 /* ============================= INVOICE DOCUMENT ============================= */
 function InvoiceDocument({ invoice, settings }) {
+  const initials = (settings.companyName || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return (
-    <div id="invoice-print-area" className="print-area rounded-lg p-8" style={{ background: "#fff", border: `1px solid ${C.border}`, color: C.ink }}>
-      <div className="flex justify-between items-start pb-5" style={{ borderBottom: `2px solid ${C.navy}` }}>
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Ship size={22} style={{ color: C.orange }} />
-            <span className="font-bold text-lg tracking-tight" style={{ color: C.navy }}>{settings.companyName}</span>
+    <div id="invoice-print-area" className="rounded-xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(11,31,58,0.08)" }}>
+      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.navy})` }} />
+      <div className="p-6 sm:p-9">
+        <div className="flex justify-between items-start gap-4 pb-6" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="shrink-0 flex items-center justify-center rounded-lg font-bold text-sm" style={{ width: 42, height: 42, background: C.navy, color: "#fff" }}>
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-lg tracking-tight" style={{ color: C.navy }}>{settings.companyName}</div>
+              <div className="text-xs leading-relaxed mt-0.5" style={{ color: C.inkMuted }}>
+                {settings.address}<br />
+                Tél: {settings.phone} · {settings.email}<br />
+                {settings.ninea} · {settings.rccm}
+              </div>
+            </div>
           </div>
-          <div className="text-xs leading-relaxed" style={{ color: C.inkMuted }}>
-            {settings.address}<br />
-            Tél: {settings.phone} · {settings.email}<br />
-            {settings.ninea} · {settings.rccm}
+          <div className="text-right shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Facture</div>
+            <div className="inline-block px-3 py-1.5 rounded-md font-bold text-sm" style={{ background: C.orangeSoft, color: C.orange, fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em" }}>
+              {invoice.numero}
+            </div>
+            <div className="text-xs mt-1.5" style={{ color: C.inkMuted }}>Émise le {invoice.date}</div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="inline-block px-3 py-1 rounded" style={{ background: C.navy, color: "#fff", fontFamily: "ui-monospace, monospace", letterSpacing: "0.06em" }}>
-            {invoice.numero}
-          </div>
-          <div className="text-xs mt-1" style={{ color: C.inkMuted }}>Date d'émission : {invoice.date}</div>
-        </div>
-      </div>
 
-      <div className="flex justify-between items-start py-4">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.inkMuted }}>Facturé à</div>
-          <div className="font-bold" style={{ color: C.navy }}>{settings.clientName}</div>
-          <div className="text-xs" style={{ color: C.inkMuted }}>{settings.clientAddress}</div>
+        <div className="flex justify-between items-start py-5">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Facturé à</div>
+            <div className="font-bold" style={{ color: C.navy }}>{settings.clientName}</div>
+            <div className="text-xs" style={{ color: C.inkMuted }}>{settings.clientAddress}</div>
+          </div>
         </div>
-      </div>
 
-      <table className="w-full text-sm mt-2">
-        <thead>
-          <tr style={{ background: C.steelSoft }}>
-            {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "TTC"].map((h) => (
-              <th key={h} className="text-left px-2 py-2 text-xs font-semibold uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {invoice.lines.map((l, i) => (
-            <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
-              <td className="px-2 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
-              <td className="px-2 py-2 whitespace-nowrap">{l.typeConteneur}</td>
-              <td className="px-2 py-2">{l.destination}</td>
-              <td className="px-2 py-2"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
-              <td className="px-2 py-2 whitespace-nowrap">{l.reference}</td>
-              <td className="px-2 py-2">{fmtPlain(l.ht)}</td>
-              <td className="px-2 py-2">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
-              <td className="px-2 py-2 font-semibold" style={{ color: C.navy }}>{fmtPlain(l.ttc)}</td>
+        <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+          <thead>
+            <tr>
+              {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "TTC"].map((h, i) => (
+                <th
+                  key={h}
+                  className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider"
+                  style={{ color: "#fff", background: C.navy, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 7 ? 8 : 0 }}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {invoice.lines.map((l, i) => (
+              <tr key={i} style={{ background: i % 2 === 1 ? C.steelSoft : "transparent" }}>
+                <td className="px-3 py-2.5 font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">{l.typeConteneur}</td>
+                <td className="px-3 py-2.5">{l.destination}</td>
+                <td className="px-3 py-2.5"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                <td className="px-3 py-2.5 whitespace-nowrap">{l.reference}</td>
+                <td className="px-3 py-2.5">{fmtPlain(l.ht)}</td>
+                <td className="px-3 py-2.5">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
+                <td className="px-3 py-2.5 font-semibold" style={{ color: C.navy }}>{fmtPlain(l.ttc)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      <div className="flex justify-end mt-4">
-        <div className="w-64 text-sm space-y-1">
-          <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>{fmtPlain(invoice.totals.ht)}</span></div>
-          <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>{fmtPlain(invoice.totals.tva)}</span></div>
-          <div className="flex justify-between font-bold text-base pt-2" style={{ borderTop: `1px solid ${C.border}`, color: C.navy }}>
-            <span>Total TTC</span><span>{fmt(invoice.totals.ttc)}</span>
+        <div className="flex justify-end mt-5">
+          <div className="w-72 rounded-lg p-4 text-sm space-y-1.5" style={{ background: C.steelSoft }}>
+            <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>{fmtPlain(invoice.totals.ht)}</span></div>
+            <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>{fmtPlain(invoice.totals.tva)}</span></div>
+            <div className="flex justify-between items-center font-bold text-base pt-2.5 mt-1" style={{ borderTop: `1px solid ${C.border}`, color: C.navy }}>
+              <span>Total TTC</span>
+              <span className="px-2.5 py-1 rounded-md" style={{ background: C.navy, color: "#fff" }}>{fmt(invoice.totals.ttc)}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-8 pt-4 text-xs" style={{ borderTop: `1px solid ${C.border}`, color: C.inkMuted }}>
-        {settings.footer}
+        <div className="mt-8 pt-4 text-xs" style={{ borderTop: `1px solid ${C.border}`, color: C.inkMuted }}>
+          {settings.footer}
+        </div>
       </div>
     </div>
   );
 }
 
-/* ============================= PRINTABLE / PDF EXPORT ============================= */
-// window.print() is unreliable inside the sandboxed artifact preview frame, so instead
-// we build a fully standalone HTML document (inline styles, no external deps) and either
-// open it in a real browser tab (which can print itself) or download it as a file the
-// person can open and print/save-as-PDF from any browser.
-function buildInvoiceHTML(invoice, settings) {
-  const rows = invoice.lines.map((l) => `
-    <tr>
-      <td class="tag">${l.numeroConteneur || "—"}</td>
-      <td>${l.typeConteneur || ""}</td>
-      <td>${l.destination || ""}</td>
-      <td>${natureLabel(l.nature)}</td>
-      <td>${l.reference || "—"}</td>
-      <td>${fmtPlain(l.ht)}</td>
-      <td>${sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
-      <td class="strong">${fmtPlain(l.ttc)}</td>
-    </tr>`).join("");
-
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8" />
-<title>${invoice.numero}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; color: #16212E; background: #fff; margin: 0; padding: 32px; }
-  .doc { max-width: 900px; margin: 0 auto; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0B1F3A; padding-bottom: 18px; }
-  .company { font-weight: 700; font-size: 18px; color: #0B1F3A; }
-  .muted { color: #66707C; font-size: 12px; line-height: 1.6; }
-  .invnum { display: inline-block; background: #0B1F3A; color: #fff; padding: 6px 12px; border-radius: 4px; font-family: monospace; letter-spacing: 0.06em; }
-  .client { padding: 16px 0; }
-  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #66707C; margin-bottom: 4px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-  th { text-align: left; background: #EDF1F6; color: #3B5578; padding: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-  td { padding: 8px; border-top: 1px solid #E3DFD3; }
-  .tag { font-family: monospace; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
-  .strong { font-weight: 700; color: #0B1F3A; }
-  .totals { display: flex; justify-content: flex-end; margin-top: 16px; }
-  .totals table { width: 260px; }
-  .totals td { border: none; padding: 4px 8px; }
-  .totalline td { border-top: 1px solid #E3DFD3; font-weight: 700; color: #0B1F3A; font-size: 15px; }
-  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #E3DFD3; font-size: 11px; color: #66707C; }
-  .toolbar { max-width: 900px; margin: 0 auto 16px; text-align: right; }
-  .toolbar button { background: #0B1F3A; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; }
-  @media print { .toolbar { display: none; } body { padding: 0; } }
-</style>
-</head>
-<body>
-  <div class="toolbar"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
-  <div class="doc">
-    <div class="header">
-      <div>
-        <div class="company">${settings.companyName}</div>
-        <div class="muted">${settings.address}<br/>Tél: ${settings.phone} · ${settings.email}<br/>${settings.ninea} · ${settings.rccm}</div>
-      </div>
-      <div style="text-align:right">
-        <span class="invnum">${invoice.numero}</span>
-        <div class="muted" style="margin-top:6px;">Date d'émission : ${invoice.date}</div>
-      </div>
-    </div>
-    <div class="client">
-      <div class="label">Facturé à</div>
-      <div class="strong">${settings.clientName}</div>
-      <div class="muted">${settings.clientAddress}</div>
-    </div>
-    <table>
-      <thead><tr>
-        <th>N° Conteneur</th><th>Type</th><th>Destination</th><th>Nature</th><th>Référence</th><th>HT</th><th>TVA 18%</th><th>TTC</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="totals">
-      <table>
-        <tr><td>Total HT</td><td style="text-align:right">${fmtPlain(invoice.totals.ht)}</td></tr>
-        <tr><td>Total TVA</td><td style="text-align:right">${fmtPlain(invoice.totals.tva)}</td></tr>
-        <tr class="totalline"><td>Total TTC</td><td style="text-align:right">${fmt(invoice.totals.ttc)}</td></tr>
-      </table>
-    </div>
-    <div class="footer">${settings.footer}</div>
-  </div>
-</body>
-</html>`;
-}
-
+/* ============================= PDF EXPORT & GOOGLE DRIVE ============================= */
 function triggerFileDownload(url, filename) {
   const a = document.createElement("a");
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-function openInvoicePrintable(invoice, settings, mode) {
-  const html = buildInvoiceHTML(invoice, settings);
-  const blob = new Blob([html], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  if (mode === "download") {
-    triggerFileDownload(url, `${invoice.numero}.html`);
-  } else {
-    const win = window.open(url, "_blank");
-    if (!win) triggerFileDownload(url, `${invoice.numero}.html`); // popup blocked: fall back to download
+// Renders the given DOM node (the invoice) to a real, multi-page-aware PDF blob.
+async function invoiceNodeToPdfBlob(node) {
+  const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let heightLeft = imgHeight;
+  let position = 0;
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while (heightLeft > 0) {
+    position -= pageHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
   }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return pdf.output("blob");
+}
+
+// Google Drive upload via Google Identity Services (loaded through the <script> tag
+// in index.html). Requires VITE_GOOGLE_CLIENT_ID — see README for setup.
+function getGoogleAccessToken() {
+  return new Promise((resolve, reject) => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return reject(new Error("Google Drive non configuré (VITE_GOOGLE_CLIENT_ID manquant)"));
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      return reject(new Error("Service Google non chargé, réessayez dans quelques secondes"));
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/drive.file",
+      callback: (resp) => (resp.error ? reject(resp) : resolve(resp.access_token)),
+    });
+    tokenClient.requestAccessToken();
+  });
+}
+
+async function uploadBlobToDrive(blob, filename) {
+  const token = await getGoogleAccessToken();
+  const metadata = { name: filename, mimeType: "application/pdf" };
+  const form = new FormData();
+  form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+  form.append("file", blob);
+  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error("Échec de l'envoi vers Google Drive");
+  return res.json();
+}
+
+/* ============================= INVOICE PREVIEW MODAL ============================= */
+function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
+  const docRef = useRef(null);
+  const [busy, setBusy] = useState(null); // "pdf" | "drive" | null
+  const [driveStatus, setDriveStatus] = useState(null); // "ok" | "error" | null
+  const driveConfigured = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  const handleDownloadPdf = async () => {
+    setBusy("pdf");
+    try {
+      const blob = await invoiceNodeToPdfBlob(docRef.current);
+      const url = URL.createObjectURL(blob);
+      triggerFileDownload(url, `${invoice.numero}.pdf`);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) {
+      alert("Erreur lors de la génération du PDF : " + e.message);
+    }
+    setBusy(null);
+  };
+
+  const handleSaveToDrive = async () => {
+    setBusy("drive");
+    setDriveStatus(null);
+    try {
+      const blob = await invoiceNodeToPdfBlob(docRef.current);
+      await uploadBlobToDrive(blob, `${invoice.numero}.pdf`);
+      setDriveStatus("ok");
+    } catch (e) {
+      setDriveStatus("error");
+      console.error(e);
+    }
+    setBusy(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6" style={{ background: "rgba(11,31,58,0.6)" }} onClick={onClose}>
+      <div
+        className="w-full max-w-3xl rounded-xl overflow-hidden flex flex-col"
+        style={{ background: C.bg, maxHeight: "94vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderBottom: `1px solid ${C.border}` }}>
+          <div className="font-bold text-sm" style={{ color: C.navy, fontFamily: "ui-monospace, monospace" }}>{invoice.numero}</div>
+          <button onClick={onClose} className="p-1.5 rounded hover:opacity-70" style={{ color: C.navy }}><X size={18} /></button>
+        </div>
+
+        <div className="overflow-y-auto p-3 sm:p-6 flex-1">
+          <div ref={docRef}>
+            <InvoiceDocument invoice={invoice} settings={settings} />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 justify-end px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderTop: `1px solid ${C.border}` }}>
+          {driveStatus === "ok" && <span className="text-xs flex items-center gap-1" style={{ color: C.green }}><CheckCircle2 size={14} /> Envoyée sur Drive</span>}
+          {driveStatus === "error" && <span className="text-xs" style={{ color: C.red }}>Échec de l'envoi vers Drive</span>}
+          <Btn kind="ghost" icon={Download} onClick={() => onExportExcel(invoice)}>Excel</Btn>
+          <Btn
+            kind="ghost" icon={UploadCloud} disabled={busy === "drive" || !driveConfigured}
+            title={!driveConfigured ? "Google Drive non configuré — voir README" : ""}
+            onClick={handleSaveToDrive}
+          >
+            {busy === "drive" ? "Envoi…" : "Google Drive"}
+          </Btn>
+          <Btn kind="dark" icon={Printer} disabled={busy === "pdf"} onClick={handleDownloadPdf}>
+            {busy === "pdf" ? "Génération…" : "Enregistrer en PDF"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ============================= INVOICES TAB ============================= */
@@ -1066,25 +1113,6 @@ function InvoicesTab({ invoices, settings }) {
     XLSX.writeFile(wb, `${inv.numero}.xlsx`);
   };
 
-  if (active) {
-    return (
-      <div className="space-y-4">
-        <div className="flex justify-between items-center flex-wrap gap-2">
-          <Btn kind="ghost" onClick={() => setActive(null)}>← Retour aux factures</Btn>
-          <div className="flex gap-2 flex-wrap">
-            <Btn kind="ghost" icon={Download} onClick={() => exportExcel(active)}>Excel</Btn>
-            <Btn kind="ghost" icon={Download} onClick={() => openInvoicePrintable(active, settings, "download")}>Télécharger (HTML imprimable)</Btn>
-            <Btn kind="dark" icon={Printer} onClick={() => openInvoicePrintable(active, settings, "open")}>Aperçu / Imprimer en PDF</Btn>
-          </div>
-        </div>
-        <div className="text-xs rounded-md px-3 py-2" style={{ background: C.amberSoft, color: C.amber }}>
-          "Aperçu / Imprimer" ouvre la facture dans un nouvel onglet avec un bouton d'impression — utilisez "Enregistrer en PDF" dans la boîte de dialogue d'impression de votre navigateur. Si le nouvel onglet ne s'ouvre pas (bloqueur de pop-up), le fichier HTML est téléchargé automatiquement à la place.
-        </div>
-        <InvoiceDocument invoice={active} settings={settings} />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold" style={{ color: C.navy }}>Factures</h2>
@@ -1109,12 +1137,14 @@ function InvoicesTab({ invoices, settings }) {
                 <td className="px-3 py-2">{inv.date}</td>
                 <td className="px-3 py-2">{inv.lines.length}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(inv.totals.ttc)}</td>
-                <td className="px-3 py-2"><Btn small kind="ghost" onClick={() => setActive(inv)}>Voir / Imprimer</Btn></td>
+                <td className="px-3 py-2"><Btn small kind="ghost" onClick={() => setActive(inv)}>Aperçu</Btn></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {active && <InvoiceModal invoice={active} settings={settings} onExportExcel={exportExcel} onClose={() => setActive(null)} />}
     </div>
   );
 }
