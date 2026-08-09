@@ -926,7 +926,7 @@ function InvoiceDocument({ invoice, settings }) {
               {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "TTC"].map((h, i) => (
                 <th
                   key={h}
-                  className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider"
+                  className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap"
                   style={{ color: "#fff", background: C.invoiceBlue, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 7 ? 8 : 0 }}
                 >
                   {h}
@@ -937,14 +937,14 @@ function InvoiceDocument({ invoice, settings }) {
           <tbody>
             {invoice.lines.map((l, i) => (
               <tr key={i} style={{ background: i % 2 === 1 ? C.steelSoft : "transparent" }}>
-                <td className="px-3 py-2.5 font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
-                <td className="px-3 py-2.5 whitespace-nowrap">{l.typeConteneur}</td>
-                <td className="px-3 py-2.5">{l.destination}</td>
-                <td className="px-3 py-2.5"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
-                <td className="px-3 py-2.5 whitespace-nowrap">{l.reference}</td>
-                <td className="px-3 py-2.5">{fmtPlain(l.ht)}</td>
-                <td className="px-3 py-2.5">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
-                <td className="px-3 py-2.5 font-semibold" style={{ color: C.invoiceBlue }}>{fmtPlain(l.ttc)}</td>
+                <td className="px-2 py-1.5 text-xs font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
+                <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.typeConteneur}</td>
+                <td className="px-2 py-1.5 text-xs">{l.destination}</td>
+                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
+                <td className="px-2 py-1.5 text-xs">{fmtPlain(l.ht)}</td>
+                <td className="px-2 py-1.5 text-xs">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
+                <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: C.invoiceBlue }}>{fmtPlain(l.ttc)}</td>
               </tr>
             ))}
           </tbody>
