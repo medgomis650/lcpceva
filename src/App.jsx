@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import logoImg from "./assets/logo.png";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
   Download, X, Check, Filter, AlertTriangle, MapPin, Truck, ChevronDown,
@@ -30,6 +31,8 @@ const C = {
   amberSoft: "#FBF0DA",
   red: "#B3412C",
   redSoft: "#F8E4DE",
+  invoiceBlue: "#1e3a8a",
+  invoiceBlueSoft: "#E3E8F7",
 };
 
 const NATURES = [
@@ -869,18 +872,15 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
 
 /* ============================= INVOICE DOCUMENT ============================= */
 function InvoiceDocument({ invoice, settings }) {
-  const initials = (settings.companyName || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return (
-    <div id="invoice-print-area" className="rounded-xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(11,31,58,0.08)" }}>
-      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.navy})` }} />
+    <div id="invoice-print-area" className="rounded-xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(30,58,138,0.10)" }}>
+      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.invoiceBlue})` }} />
       <div className="p-6 sm:p-9">
         <div className="flex justify-between items-start gap-4 pb-6" style={{ borderBottom: `1px solid ${C.border}` }}>
           <div className="flex items-start gap-3 min-w-0">
-            <div className="shrink-0 flex items-center justify-center rounded-lg font-bold text-sm" style={{ width: 42, height: 42, background: C.navy, color: "#fff" }}>
-              {initials}
-            </div>
+            <img src={logoImg} alt={settings.companyName} className="shrink-0" style={{ height: 48, width: "auto", objectFit: "contain" }} />
             <div className="min-w-0">
-              <div className="font-bold text-lg tracking-tight" style={{ color: C.navy }}>{settings.companyName}</div>
+              <div className="font-bold text-lg tracking-tight" style={{ color: C.invoiceBlue }}>{settings.companyName}</div>
               <div className="text-xs leading-relaxed mt-0.5" style={{ color: C.inkMuted }}>
                 {settings.address}<br />
                 Tél: {settings.phone} · {settings.email}<br />
@@ -890,7 +890,15 @@ function InvoiceDocument({ invoice, settings }) {
           </div>
           <div className="text-right shrink-0">
             <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Facture</div>
-            <div className="inline-block px-3 py-1.5 rounded-md font-bold text-sm" style={{ background: C.orangeSoft, color: C.orange, fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em" }}>
+            <div
+              className="font-bold text-sm rounded-md"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
+                minWidth: 140, padding: "6px 12px",
+                background: C.invoiceBlueSoft, color: C.invoiceBlue,
+                fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em",
+              }}
+            >
               {invoice.numero}
             </div>
             <div className="text-xs mt-1.5" style={{ color: C.inkMuted }}>Émise le {invoice.date}</div>
@@ -900,7 +908,7 @@ function InvoiceDocument({ invoice, settings }) {
         <div className="flex justify-between items-start py-5">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Facturé à</div>
-            <div className="font-bold" style={{ color: C.navy }}>{settings.clientName}</div>
+            <div className="font-bold" style={{ color: C.invoiceBlue }}>{settings.clientName}</div>
             <div className="text-xs" style={{ color: C.inkMuted }}>{settings.clientAddress}</div>
           </div>
         </div>
@@ -912,7 +920,7 @@ function InvoiceDocument({ invoice, settings }) {
                 <th
                   key={h}
                   className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: "#fff", background: C.navy, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 7 ? 8 : 0 }}
+                  style={{ color: "#fff", background: C.invoiceBlue, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 7 ? 8 : 0 }}
                 >
                   {h}
                 </th>
@@ -929,7 +937,7 @@ function InvoiceDocument({ invoice, settings }) {
                 <td className="px-3 py-2.5 whitespace-nowrap">{l.reference}</td>
                 <td className="px-3 py-2.5">{fmtPlain(l.ht)}</td>
                 <td className="px-3 py-2.5">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
-                <td className="px-3 py-2.5 font-semibold" style={{ color: C.navy }}>{fmtPlain(l.ttc)}</td>
+                <td className="px-3 py-2.5 font-semibold" style={{ color: C.invoiceBlue }}>{fmtPlain(l.ttc)}</td>
               </tr>
             ))}
           </tbody>
@@ -939,9 +947,14 @@ function InvoiceDocument({ invoice, settings }) {
           <div className="w-72 rounded-lg p-4 text-sm space-y-1.5" style={{ background: C.steelSoft }}>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>{fmtPlain(invoice.totals.ht)}</span></div>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>{fmtPlain(invoice.totals.tva)}</span></div>
-            <div className="flex justify-between items-center font-bold text-base pt-2.5 mt-1" style={{ borderTop: `1px solid ${C.border}`, color: C.navy }}>
+            <div className="flex justify-between items-center font-bold text-base pt-2.5 mt-1" style={{ borderTop: `1px solid ${C.border}`, color: C.invoiceBlue }}>
               <span>Total TTC</span>
-              <span className="px-2.5 py-1 rounded-md" style={{ background: C.navy, color: "#fff" }}>{fmt(invoice.totals.ttc)}</span>
+              <span
+                className="rounded-md"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", minWidth: 130, padding: "6px 10px", background: C.invoiceBlue, color: "#fff" }}
+              >
+                {fmt(invoice.totals.ttc)}
+              </span>
             </div>
           </div>
         </div>
@@ -962,7 +975,13 @@ function triggerFileDownload(url, filename) {
 }
 
 // Renders the given DOM node (the invoice) to a real, multi-page-aware PDF blob.
+async function waitForImages(node) {
+  const imgs = Array.from(node.querySelectorAll("img"));
+  await Promise.all(imgs.map((img) => (img.complete ? Promise.resolve() : new Promise((res) => { img.onload = res; img.onerror = res; }))));
+}
+
 async function invoiceNodeToPdfBlob(node) {
+  await waitForImages(node);
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
   const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({ unit: "pt", format: "a4" });
@@ -1058,7 +1077,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderBottom: `1px solid ${C.border}` }}>
-          <div className="font-bold text-sm" style={{ color: C.navy, fontFamily: "ui-monospace, monospace" }}>{invoice.numero}</div>
+          <div className="font-bold text-sm" style={{ color: C.invoiceBlue, fontFamily: "ui-monospace, monospace" }}>{invoice.numero}</div>
           <button onClick={onClose} className="p-1.5 rounded hover:opacity-70" style={{ color: C.navy }}><X size={18} /></button>
         </div>
 
