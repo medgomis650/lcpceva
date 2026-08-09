@@ -3,10 +3,10 @@ import * as XLSX from "xlsx";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
   Download, X, Check, Filter, AlertTriangle, MapPin, Truck, ChevronDown,
-  Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet
+  Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { loadKey, saveKey, supabaseConfigured } from "./storage";
+import { loadKey, saveKey, supabaseConfigured, supabase } from "./storage";
 
 /* ============================= DESIGN TOKENS ============================= */
 const C = {
@@ -1167,6 +1167,44 @@ function SettingsTab({ settings, onSave }) {
 }
 
 /* ============================= APP ============================= */
+/* ============================= LOGIN PAGE ============================= */
+function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) setError("Email ou mot de passe incorrect.");
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: C.navy }}>
+      <form onSubmit={submit} className="w-full max-w-xs rounded-lg p-6 space-y-3" style={{ background: "#fff" }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Truck size={20} style={{ color: C.orange }} />
+          <span className="font-bold" style={{ color: C.navy }}>Facturation Ground &amp; Rail</span>
+        </div>
+        <Field label="Email" required>
+          <input type="email" required autoFocus className={inputCls} style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Mot de passe" required>
+          <input type="password" required className={inputCls} style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        {error && <div className="text-xs" style={{ color: C.red }}>{error}</div>}
+        <Btn type="submit" icon={Check} disabled={loading}>{loading ? "Connexion…" : "Se connecter"}</Btn>
+        <p className="text-xs pt-1" style={{ color: C.inkMuted }}>Pas de compte ? Demandez à un administrateur de vous en créer un.</p>
+      </form>
+    </div>
+  );
+}
+
+/* ============================= APP ============================= */
 export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [operations, setOperations] = useState([]);
@@ -1270,13 +1308,14 @@ export default function App() {
   ];
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [unlocked, setUnlocked] = useState(() => {
-    const passcode = import.meta.env.VITE_APP_PASSCODE;
-    if (!passcode) return true;
-    return sessionStorage.getItem("ceva-unlocked") === "yes";
-  });
-  const [passInput, setPassInput] = useState("");
-  const [passError, setPassError] = useState(false);
+  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out, object = logged in
+
+  useEffect(() => {
+    if (!supabase) { setSession(null); return; }
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   if (!supabaseConfigured) {
     return (
@@ -1289,36 +1328,11 @@ export default function App() {
     );
   }
 
-  const appPasscode = import.meta.env.VITE_APP_PASSCODE;
-  if (appPasscode && !unlocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: C.navy }}>
-        <form
-          className="w-full max-w-xs rounded-lg p-6 space-y-3"
-          style={{ background: "#fff" }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (passInput === appPasscode) {
-              sessionStorage.setItem("ceva-unlocked", "yes");
-              setUnlocked(true);
-            } else {
-              setPassError(true);
-            }
-          }}
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Truck size={20} style={{ color: C.orange }} />
-            <span className="font-bold" style={{ color: C.navy }}>Facturation Ground &amp; Rail</span>
-          </div>
-          <input
-            type="password" autoFocus placeholder="Code d'accès" className={inputCls} style={inputStyle}
-            value={passInput} onChange={(e) => { setPassInput(e.target.value); setPassError(false); }}
-          />
-          {passError && <div className="text-xs" style={{ color: C.red }}>Code incorrect.</div>}
-          <Btn type="submit" icon={Check}>Entrer</Btn>
-        </form>
-      </div>
-    );
+  if (session === undefined) {
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg, color: C.navy }}>Vérification de la connexion…</div>;
+  }
+  if (session === null) {
+    return <LoginPage />;
   }
 
   if (loading) {
@@ -1336,7 +1350,7 @@ export default function App() {
               <div className="text-xs truncate" style={{ color: "#9FB2CC" }}>Client unique : {settings.clientName}</div>
             </div>
           </div>
-          <nav className="hidden md:flex gap-1 flex-wrap">
+          <nav className="hidden md:flex gap-1 flex-wrap items-center">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -1347,6 +1361,14 @@ export default function App() {
                 <t.icon size={14} /> {t.label}
               </button>
             ))}
+            <button
+              title={session?.user?.email}
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ml-1"
+              style={{ background: "transparent", color: "#C7D3E3" }}
+            >
+              <LogOut size={14} /> Déconnexion
+            </button>
           </nav>
           <button className="md:hidden p-2 rounded-md shrink-0" style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }} onClick={() => setMobileNavOpen((v) => !v)}>
             {mobileNavOpen ? <X size={18} /> : <ChevronDown size={18} />}
@@ -1364,6 +1386,13 @@ export default function App() {
                 <t.icon size={15} /> {t.label}
               </button>
             ))}
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-left"
+              style={{ background: "rgba(255,255,255,0.06)", color: "#C7D3E3" }}
+            >
+              <LogOut size={15} /> Déconnexion
+            </button>
           </div>
         )}
       </div>
