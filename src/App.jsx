@@ -900,8 +900,7 @@ function InvoiceDocument({ invoice, settings }) {
             <div
               className="font-bold text-sm rounded-md"
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
-                minWidth: 140, padding: "6px 12px",
+                textAlign: "center", width: 150, margin: "0 0 0 auto", padding: "6px 12px",
                 background: C.invoiceBlueSoft, color: C.invoiceBlue,
                 fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em",
               }}
@@ -954,14 +953,16 @@ function InvoiceDocument({ invoice, settings }) {
           <div className="w-72 rounded-lg p-4 text-sm space-y-1.5" style={{ background: C.steelSoft }}>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>{fmtPlain(invoice.totals.ht)}</span></div>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>{fmtPlain(invoice.totals.tva)}</span></div>
-            <div className="flex justify-between items-center font-bold text-base pt-2.5 mt-1" style={{ borderTop: `1px solid ${C.border}`, color: C.invoiceBlue }}>
-              <span>Total TTC</span>
-              <span
-                className="rounded-md"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", minWidth: 130, padding: "6px 10px", background: C.invoiceBlue, color: "#fff" }}
-              >
-                {fmt(invoice.totals.ttc)}
-              </span>
+            <div className="pt-2.5 mt-1 font-bold text-base" style={{ borderTop: `1px solid ${C.border}`, color: C.invoiceBlue }}>
+              <div className="flex justify-between items-center">
+                <span>Total TTC</span>
+                <span
+                  className="rounded-md inline-block"
+                  style={{ textAlign: "center", width: 150, padding: "6px 10px", background: C.invoiceBlue, color: "#fff" }}
+                >
+                  {fmt(invoice.totals.ttc)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
