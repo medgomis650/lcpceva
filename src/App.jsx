@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import logoImg from "./assets/logo.png";
+import logoImg from "./assets/logo.jpg";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
   Download, X, Check, Filter, AlertTriangle, MapPin, Truck, ChevronDown,
   Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut,
-  UploadCloud, CheckCircle2
+  UploadCloud, CheckCircle2, Eye, FileDown
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { loadKey, saveKey, supabaseConfigured, supabase } from "./storage";
@@ -878,7 +878,7 @@ function InvoiceDocument({ invoice, settings }) {
       <div className="p-6 sm:p-9">
         <div className="flex justify-between items-start gap-4 pb-6" style={{ borderBottom: `1px solid ${C.border}` }}>
           <div className="flex items-start gap-3 min-w-0">
-            <img src={logoImg} alt={settings.companyName} className="shrink-0" style={{ height: 48, width: "auto", objectFit: "contain" }} />
+            <img src={logoImg} alt={settings.companyName} className="shrink-0 rounded" style={{ height: 64, width: 64, objectFit: "contain" }} />
             <div className="min-w-0">
               <div className="font-bold text-lg tracking-tight" style={{ color: C.invoiceBlue }}>{settings.companyName}</div>
               <div className="text-xs leading-relaxed mt-0.5" style={{ color: C.inkMuted }}>
@@ -1091,16 +1091,24 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
           {driveStatus === "ok" && <span className="text-xs flex items-center gap-1" style={{ color: C.green }}><CheckCircle2 size={14} /> Envoyée sur Drive</span>}
           {driveStatus === "error" && <span className="text-xs" style={{ color: C.red }}>Échec de l'envoi vers Drive</span>}
           <Btn kind="ghost" icon={Download} onClick={() => onExportExcel(invoice)}>Excel</Btn>
-          <Btn
-            kind="ghost" icon={UploadCloud} disabled={busy === "drive" || !driveConfigured}
-            title={!driveConfigured ? "Google Drive non configuré — voir README" : ""}
+          <button
+            title={driveConfigured ? "Enregistrer sur Google Drive" : "Google Drive non configuré — voir README"}
+            disabled={busy === "drive" || !driveConfigured}
             onClick={handleSaveToDrive}
+            className={`inline-flex items-center justify-center rounded-md p-2.5 transition ${busy === "drive" || !driveConfigured ? "opacity-40 cursor-not-allowed" : "hover:opacity-85"}`}
+            style={{ background: "transparent", color: C.invoiceBlue, border: `1px solid ${C.border}` }}
           >
-            {busy === "drive" ? "Envoi…" : "Google Drive"}
-          </Btn>
-          <Btn kind="dark" icon={Printer} disabled={busy === "pdf"} onClick={handleDownloadPdf}>
-            {busy === "pdf" ? "Génération…" : "Enregistrer en PDF"}
-          </Btn>
+            <UploadCloud size={18} />
+          </button>
+          <button
+            title="Télécharger en PDF"
+            disabled={busy === "pdf"}
+            onClick={handleDownloadPdf}
+            className={`inline-flex items-center justify-center rounded-md p-2.5 transition ${busy === "pdf" ? "opacity-40 cursor-not-allowed" : "hover:opacity-85"}`}
+            style={{ background: C.invoiceBlue, color: "#fff" }}
+          >
+            <FileDown size={18} />
+          </button>
         </div>
       </div>
     </div>
@@ -1156,7 +1164,16 @@ function InvoicesTab({ invoices, settings }) {
                 <td className="px-3 py-2">{inv.date}</td>
                 <td className="px-3 py-2">{inv.lines.length}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(inv.totals.ttc)}</td>
-                <td className="px-3 py-2"><Btn small kind="ghost" onClick={() => setActive(inv)}>Aperçu</Btn></td>
+                <td className="px-3 py-2">
+                  <button
+                    title="Aperçu"
+                    onClick={() => setActive(inv)}
+                    className="p-1.5 rounded hover:opacity-70"
+                    style={{ color: C.invoiceBlue }}
+                  >
+                    <Eye size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
