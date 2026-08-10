@@ -74,7 +74,7 @@ const blankOp = (nature) => ({
   id: null,
   nature,
   date: new Date().toISOString().slice(0, 10),
-  refType: "OT",
+  refType: "ODM",
   refValue: "",
   booking: "",
   typeConteneur: "",
@@ -246,7 +246,7 @@ function OperationForm({ initial, tariffs, onCancel, onSave }) {
         <Field label={label} required key={key}>
           <div className="flex gap-2">
             <select className={inputCls} style={inputStyle} value={form.refType} onChange={(e) => set("refType", e.target.value)}>
-              <option>OT</option>
+              <option>ODM</option>
               <option>N° BL</option>
             </select>
             <input className={inputCls} style={inputStyle} placeholder="Valeur" value={form.refValue} onChange={(e) => set("refValue", e.target.value)} />
@@ -1339,18 +1339,18 @@ export default function App() {
         loadKey("ceva-settings", defaultSettings),
       ]);
 
-      // Migration: older data saved "Ordre de transport" before it was shortened to "OT".
+      // Migration: older data used "Ordre de transport", then "OT" — now "ODM".
       let opsChanged = false;
       const ops = rawOps.map((o) => {
-        if (o.refType === "Ordre de transport") { opsChanged = true; return { ...o, refType: "OT" }; }
+        if (o.refType === "Ordre de transport" || o.refType === "OT") { opsChanged = true; return { ...o, refType: "ODM" }; }
         return o;
       });
       let invChanged = false;
       const inv = rawInv.map((iv) => {
         const lines = iv.lines.map((l) => {
-          if (typeof l.reference === "string" && l.reference.startsWith("Ordre de transport:")) {
+          if (typeof l.reference === "string" && (l.reference.startsWith("Ordre de transport:") || l.reference.startsWith("OT:"))) {
             invChanged = true;
-            return { ...l, reference: l.reference.replace("Ordre de transport:", "OT:") };
+            return { ...l, reference: l.reference.replace(/^(Ordre de transport|OT):/, "ODM:") };
           }
           return l;
         });
