@@ -1314,8 +1314,23 @@ export default function App() {
   const [settings, setSettings] = useState(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out, object = logged in
+  const isAdmin = session?.user?.user_metadata?.role === "admin";
 
   useEffect(() => {
+    if (!supabase) { setSession(null); return; }
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // Wait until the session is confirmed before querying: fetching earlier can race the
+  // auth token being attached to Supabase requests, get blocked by the security rules
+  // (not-yet-authenticated), and silently leave the app showing empty data.
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    setLoading(true);
     (async () => {
       const [rawOps, tar, rawInv, set] = await Promise.all([
         loadKey("ceva-operations", []),
@@ -1344,10 +1359,12 @@ export default function App() {
       if (opsChanged) saveKey("ceva-operations", ops);
       if (invChanged) saveKey("ceva-invoices", inv);
 
+      if (cancelled) return;
       setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set);
       setLoading(false);
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [session]);
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -1424,15 +1441,6 @@ export default function App() {
   ];
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out, object = logged in
-  const isAdmin = session?.user?.user_metadata?.role === "admin";
-
-  useEffect(() => {
-    if (!supabase) { setSession(null); return; }
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
-    return () => listener.subscription.unsubscribe();
-  }, []);
 
   if (!supabaseConfigured) {
     return (
