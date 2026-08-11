@@ -9,7 +9,7 @@ import {
   Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut,
   UploadCloud, CheckCircle2, Eye, FileDown
 } from "lucide-react";
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { loadKey, saveKey, supabaseConfigured, supabase } from "./storage";
 
 /* ============================= DESIGN TOKENS ============================= */
@@ -454,15 +454,12 @@ function DashboardTab({ operations, invoices }) {
     return Object.keys(map).sort().map((k) => ({ month: monthLabel(k), ca: Math.round(map[k]) }));
   }, [invoices]);
 
-  const missionsEvolution = useMemo(() => {
-    const map = {};
-    operations.forEach((o) => {
-      const k = monthKey(o.date);
-      if (!k) return;
-      if (!map[k]) map[k] = { key: k, month: monthLabel(k), import: 0, export: 0, transfert: 0, mise_a_terre: 0 };
-      map[k][o.nature] += 1;
-    });
-    return Object.values(map).sort((a, b) => (a.key > b.key ? 1 : -1));
+  const missionsParNature = useMemo(() => {
+    return NATURES.map((n) => ({
+      nature: n.label,
+      key: n.key,
+      count: operations.filter((o) => o.nature === n.key).length,
+    }));
   }, [operations]);
 
   return (
@@ -497,22 +494,22 @@ function DashboardTab({ operations, invoices }) {
         </div>
 
         <div className="rounded-lg p-4" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-          <div className="font-semibold text-sm mb-3" style={{ color: C.navy }}>Évolution des missions par nature</div>
-          {missionsEvolution.length === 0 ? (
+          <div className="font-semibold text-sm mb-3" style={{ color: C.navy }}>Missions par nature d'opération</div>
+          {conteneursTotal === 0 ? (
             <div className="text-sm py-10 text-center" style={{ color: C.inkMuted }}>Aucune opération pour le moment.</div>
           ) : (
             <div style={{ width: "100%", height: 260 }}>
               <ResponsiveContainer>
-                <BarChart data={missionsEvolution}>
+                <BarChart data={missionsParNature}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={C.inkMuted} />
+                  <XAxis dataKey="nature" tick={{ fontSize: 12 }} stroke={C.inkMuted} />
                   <YAxis tick={{ fontSize: 12 }} stroke={C.inkMuted} allowDecimals={false} />
                   <Tooltip contentStyle={{ fontSize: 13, borderRadius: 8, border: `1px solid ${C.border}` }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => natureLabel(v)} />
-                  <Bar dataKey="import" name="import" stackId="a" fill={natureColors.import} />
-                  <Bar dataKey="export" name="export" stackId="a" fill={natureColors.export} />
-                  <Bar dataKey="transfert" name="transfert" stackId="a" fill={natureColors.transfert} />
-                  <Bar dataKey="mise_a_terre" name="mise_a_terre" stackId="a" fill={natureColors.mise_a_terre} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Missions" radius={[4, 4, 0, 0]}>
+                    {missionsParNature.map((entry) => (
+                      <Cell key={entry.key} fill={natureColors[entry.key]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
