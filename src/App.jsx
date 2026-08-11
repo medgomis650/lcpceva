@@ -70,6 +70,22 @@ const NATURE_FIELDS = {
 
 const CONTAINER_TYPES = ["20 DV", "40 DV", "40 HC", "20 RE", "40 RE", "20 OT", "40 OT", "20 FR", "40 FR"];
 const normalizeContainerType = (v) => v.toUpperCase().replace(/[^0-9A-Z ]/g, "");
+// ISO container number format: exactly 4 letters then 7 digits (11 chars total).
+// Enforced positionally as the person types: a digit typed in the first 4 slots
+// is dropped, a letter typed after that is dropped, and typing stops at 11 chars.
+function formatContainerNumber(raw) {
+  const clean = (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let result = "";
+  for (const ch of clean) {
+    if (result.length >= 11) break;
+    if (result.length < 4) {
+      if (/[A-Z]/.test(ch)) result += ch;
+    } else {
+      if (/[0-9]/.test(ch)) result += ch;
+    }
+  }
+  return result;
+}
 
 const blankOp = (nature) => ({
   id: null,
@@ -230,6 +246,7 @@ function OperationForm({ initial, tariffs, onCancel, onSave }) {
   const fields = NATURE_FIELDS[nature];
   const requiredOk = fields.every((f) => {
     if (f === "tarifManuel") return String(form.tarifManuel || "").trim() !== "";
+    if (f === "numeroConteneur") return (form.numeroConteneur || "").length === 11;
     return String(form[f] || "").trim() !== "";
   });
 
@@ -265,9 +282,18 @@ function OperationForm({ initial, tariffs, onCancel, onSave }) {
       );
     }
     if (key === "numeroConteneur") {
+      const len = (form.numeroConteneur || "").length;
       return (
         <Field label={label} required key={key}>
-          <input className={inputCls} style={{ ...inputStyle, fontFamily: "ui-monospace, monospace", letterSpacing: "0.05em" }} value={form.numeroConteneur} onChange={(e) => set("numeroConteneur", e.target.value.toUpperCase())} placeholder="ex: CEVU1234567" />
+          <input
+            className={inputCls} style={{ ...inputStyle, fontFamily: "ui-monospace, monospace", letterSpacing: "0.05em" }}
+            value={form.numeroConteneur} maxLength={11}
+            onChange={(e) => set("numeroConteneur", formatContainerNumber(e.target.value))}
+            placeholder="ex: CEVU1234567"
+          />
+          <span className="text-xs" style={{ color: len === 11 ? C.green : C.inkMuted }}>
+            {len}/11 — 4 lettres puis 7 chiffres
+          </span>
         </Field>
       );
     }
