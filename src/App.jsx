@@ -43,6 +43,7 @@ const NATURES = [
 ];
 const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
 const sympNatures = ["import", "export"];
+const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
 
 const FIELD_LABELS = {
   date: "Date",
@@ -716,8 +717,9 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState({}); // id -> true
   const [manualTarif, setManualTarif] = useState({}); // id -> override value
+  const [gfcSelected, setGfcSelected] = useState({}); // id -> true (optional 1500F GFC fee, no TVA)
 
-  const changeNature = (n) => { setNature(n); setSelected({}); setManualTarif({}); };
+  const changeNature = (n) => { setNature(n); setSelected({}); setManualTarif({}); setGfcSelected({}); };
 
   const list = unbilled
     .filter((o) => o.nature === nature)
@@ -744,14 +746,17 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : op.tarifManuel;
     }
     const c = computeLine(op, base || 0);
-    return { ...c, base, missing: base === null || base === undefined || base === "" };
+    const gfc = gfcSelected[op.id] ? GFC_AMOUNT : 0;
+    return { ...c, base, gfc, ttc: c.ttc + gfc, missing: base === null || base === undefined || base === "" };
   };
+
+  const toggleGfc = (opId) => setGfcSelected((g) => ({ ...g, [opId]: !g[opId] }));
 
   const totals = selectedOps.reduce((acc, o) => {
     const l = lineFor(o);
-    acc.ht += l.ht; acc.tva += l.tva; acc.ttc += l.ttc;
+    acc.ht += l.ht; acc.tva += l.tva; acc.gfc += l.gfc; acc.ttc += l.ttc;
     return acc;
-  }, { ht: 0, tva: 0, ttc: 0 });
+  }, { ht: 0, tva: 0, gfc: 0, ttc: 0 });
 
   const anyMissing = selectedOps.some((o) => lineFor(o).missing);
 
@@ -793,13 +798,13 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: C.steelSoft }}>
-                {["", "Date", "Nature", "Conteneur", "Type", "Statut", "Référence", "Tarif appliqué", "Montant TTC"].map((h) => (
+                {["", "Date", "Nature", "Conteneur", "Type", "Statut", "Référence", "Tarif appliqué", "GFC", "Montant TTC"].map((h) => (
                   <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {list.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération non facturée pour la nature "{natureLabel(nature)}".</td></tr>}
+              {list.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération non facturée pour la nature "{natureLabel(nature)}".</td></tr>}
               {list.map((o) => {
                 const l = lineFor(o);
                 const terminee = !!o.dateFin;
@@ -831,6 +836,14 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
                         />
                       ) : "—"}
                     </td>
+                    <td className="px-3 py-2">
+                      {selected[o.id] ? (
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Frais GFC 1 500 FCFA, hors TVA, optionnel">
+                          <input type="checkbox" checked={!!gfcSelected[o.id]} onChange={() => toggleGfc(o.id)} />
+                          1 500
+                        </label>
+                      ) : "—"}
+                    </td>
                     <td className="px-3 py-2 font-semibold" style={{ color: l.missing && selected[o.id] ? C.red : C.navy }}>
                       {selected[o.id] ? fmt(l.ttc) : "—"}
                     </td>
@@ -855,6 +868,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
             <div className="flex gap-6 text-sm">
               <div>Total HT <b className="text-base">{fmt(totals.ht)}</b></div>
               <div>TVA <b className="text-base">{fmt(totals.tva)}</b></div>
+              <div>GFC <b className="text-base">{fmt(totals.gfc)}</b></div>
               <div>Total TTC <b className="text-base" style={{ color: C.orangeSoft }}>{fmt(totals.ttc)}</b></div>
             </div>
             <Btn
@@ -867,11 +881,11 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
                   return {
                     opId: o.id, numeroConteneur: o.numeroConteneur, typeConteneur: o.typeConteneur,
                     destination: o.destination || "—", nature: o.nature, reference: ref,
-                    tarifSympos: l.tarifSympos, remise: l.remise, ht: l.ht, tva: l.tva, ttc: l.ttc,
+                    tarifSympos: l.tarifSympos, remise: l.remise, ht: l.ht, tva: l.tva, gfc: l.gfc, ttc: l.ttc,
                   };
                 });
                 onCreate({ lines, totals, opIds: selectedOps.map((o) => o.id) });
-                setSelected({}); setManualTarif({});
+                setSelected({}); setManualTarif({}); setGfcSelected({});
               }}
             >
               Générer la facture
@@ -935,11 +949,11 @@ function InvoiceDocument({ invoice, settings }) {
         <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
           <thead>
             <tr>
-              {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "TTC"].map((h, i) => (
+              {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "GFC", "TTC"].map((h, i) => (
                 <th
                   key={h}
                   className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap"
-                  style={{ color: "#fff", background: C.invoiceBlue, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 7 ? 8 : 0 }}
+                  style={{ color: "#fff", background: C.invoiceBlue, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 8 ? 8 : 0 }}
                 >
                   {h}
                 </th>
@@ -956,6 +970,7 @@ function InvoiceDocument({ invoice, settings }) {
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
                 <td className="px-2 py-1.5 text-xs">{fmtPlain(l.ht)}</td>
                 <td className="px-2 py-1.5 text-xs">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
+                <td className="px-2 py-1.5 text-xs">{l.gfc ? fmtPlain(l.gfc) : "—"}</td>
                 <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: C.invoiceBlue }}>{fmtPlain(l.ttc)}</td>
               </tr>
             ))}
@@ -966,6 +981,9 @@ function InvoiceDocument({ invoice, settings }) {
           <div className="w-72 rounded-lg p-4 text-sm space-y-1.5" style={{ background: C.steelSoft }}>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>{fmtPlain(invoice.totals.ht)}</span></div>
             <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>{fmtPlain(invoice.totals.tva)}</span></div>
+            {!!invoice.totals.gfc && (
+              <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total GFC (hors TVA)</span><span>{fmtPlain(invoice.totals.gfc)}</span></div>
+            )}
             <div className="pt-2.5 mt-1 font-bold text-base" style={{ borderTop: `1px solid ${C.border}`, color: C.invoiceBlue }}>
               <div className="flex justify-between items-center">
                 <span>Total TTC</span>
@@ -1151,10 +1169,10 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
     const rows = inv.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
       "Nature": natureLabel(l.nature), "Référence": l.reference,
-      "Montant HT": l.ht, "TVA": l.tva, "Montant TTC": l.ttc,
+      "Montant HT": l.ht, "TVA": l.tva, "GFC (hors TVA)": l.gfc || 0, "Montant TTC": l.ttc,
     }));
     rows.push({});
-    rows.push({ "N° Conteneur": "TOTAL", "Montant HT": inv.totals.ht, "TVA": inv.totals.tva, "Montant TTC": inv.totals.ttc });
+    rows.push({ "N° Conteneur": "TOTAL", "Montant HT": inv.totals.ht, "TVA": inv.totals.tva, "GFC (hors TVA)": inv.totals.gfc || 0, "Montant TTC": inv.totals.ttc });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Facture");
