@@ -677,7 +677,7 @@ function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEn
 }
 
 /* ============================= TARIFS SYMPOS TAB ============================= */
-function TariffsTab({ tariffs, onAdd, onDelete }) {
+function TariffsTab({ tariffs, onAdd, onDelete, isAdmin }) {
   const [form, setForm] = useState({ localite: "", typeConteneur: "", tarif: "" });
   const valid = form.localite && form.typeConteneur && form.tarif;
   return (
@@ -687,31 +687,37 @@ function TariffsTab({ tariffs, onAdd, onDelete }) {
         <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Les tarifs varient selon la localité. Configurez-les ici pour qu'ils s'appliquent automatiquement aux opérations d'import / export.</p>
       </div>
 
-      <div className="rounded-lg p-4 grid gap-3" style={{ background: C.card, border: `1px solid ${C.border}`, gridTemplateColumns: "repeat(auto-fill, minmax(160px,1fr))" }}>
-        <Field label="Localité"><input className={inputCls} style={inputStyle} value={form.localite} onChange={(e) => setForm({ ...form, localite: e.target.value })} placeholder="ex: Dakar Port" /></Field>
-        <Field label="Type de conteneur">
-          <input list="ctypes2" className={inputCls} style={inputStyle} value={form.typeConteneur} onChange={(e) => setForm({ ...form, typeConteneur: normalizeContainerType(e.target.value) })} placeholder="ex: 40 HC" />
-          <datalist id="ctypes2">{CONTAINER_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
-        </Field>
-        <Field label="TARIF (FCFA)"><input type="number" min="0" className={inputCls} style={inputStyle} value={form.tarif} onChange={(e) => setForm({ ...form, tarif: e.target.value })} /></Field>
-        <div className="flex items-end">
-          <Btn icon={Plus} disabled={!valid} onClick={() => { onAdd({ id: uid(), ...form, tarif: Number(form.tarif) }); setForm({ localite: "", typeConteneur: "", tarif: "" }); }}>
-            Ajouter
-          </Btn>
+      {isAdmin ? (
+        <div className="rounded-lg p-4 grid gap-3" style={{ background: C.card, border: `1px solid ${C.border}`, gridTemplateColumns: "repeat(auto-fill, minmax(160px,1fr))" }}>
+          <Field label="Localité"><input className={inputCls} style={inputStyle} value={form.localite} onChange={(e) => setForm({ ...form, localite: e.target.value })} placeholder="ex: Dakar Port" /></Field>
+          <Field label="Type de conteneur">
+            <input list="ctypes2" className={inputCls} style={inputStyle} value={form.typeConteneur} onChange={(e) => setForm({ ...form, typeConteneur: normalizeContainerType(e.target.value) })} placeholder="ex: 40 HC" />
+            <datalist id="ctypes2">{CONTAINER_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
+          </Field>
+          <Field label="TARIF (FCFA)"><input type="number" min="0" className={inputCls} style={inputStyle} value={form.tarif} onChange={(e) => setForm({ ...form, tarif: e.target.value })} /></Field>
+          <div className="flex items-end">
+            <Btn icon={Plus} disabled={!valid} onClick={() => { onAdd({ id: uid(), ...form, tarif: Number(form.tarif) }); setForm({ localite: "", typeConteneur: "", tarif: "" }); }}>
+              Ajouter
+            </Btn>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="text-xs rounded-md px-3 py-2" style={{ background: C.amberSoft, color: C.amber }}>
+          Lecture seule — seul un administrateur peut ajouter ou supprimer un tarif.
+        </div>
+      )}
 
       <div className="rounded-lg overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: C.steelSoft }}>
-              {["Localité", "Type", "TARIF", "Après remise -20%", "TVA 18%", "Net à facturer", ""].map((h) => (
+              {["Localité", "Type", "TARIF", "Après remise -20%", "TVA 18%", "Net à facturer", isAdmin ? "" : null].filter((h) => h !== null).map((h) => (
                 <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {tariffs.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun tarif configuré.</td></tr>}
+            {tariffs.length === 0 && <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun tarif configuré.</td></tr>}
             {tariffs.map((t) => {
               const c = computeLine({ nature: "import" }, t.tarif);
               return (
@@ -722,7 +728,7 @@ function TariffsTab({ tariffs, onAdd, onDelete }) {
                   <td className="px-3 py-2">{fmt(c.ht)}</td>
                   <td className="px-3 py-2">{fmt(c.tva)}</td>
                   <td className="px-3 py-2 font-semibold" style={{ color: C.navy }}>{fmt(c.ttc)}</td>
-                  <td className="px-3 py-2"><button onClick={() => onDelete(t.id)} className="p-1.5" style={{ color: C.red }}><Trash2 size={14} /></button></td>
+                  {isAdmin && <td className="px-3 py-2"><button onClick={() => onDelete(t.id)} className="p-1.5" style={{ color: C.red }}><Trash2 size={14} /></button></td>}
                 </tr>
               );
             })}
@@ -734,7 +740,7 @@ function TariffsTab({ tariffs, onAdd, onDelete }) {
 }
 
 /* ============================= NEW INVOICE TAB ============================= */
-function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
+function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
   const unbilled = operations.filter((o) => !o.facturee);
   const [nature, setNature] = useState(NATURES[0].key);
   const [q, setQ] = useState("");
@@ -896,7 +902,8 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
             </div>
             <Btn
               icon={Receipt}
-              disabled={anyMissing}
+              disabled={anyMissing || !isAdmin}
+              title={!isAdmin ? "Seul un administrateur peut générer une facture" : ""}
               onClick={() => {
                 const lines = selectedOps.map((o) => {
                   const l = lineFor(o);
@@ -914,6 +921,11 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate }) {
               Générer la facture
             </Btn>
           </div>
+          {!isAdmin && (
+            <div className="text-xs" style={{ color: "#F5C16C" }}>
+              Vous pouvez consulter et sélectionner les opérations, mais seul un administrateur peut valider la génération de la facture.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1262,14 +1274,20 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
 }
 
 /* ============================= SETTINGS TAB ============================= */
-function SettingsTab({ settings, onSave }) {
+function SettingsTab({ settings, onSave, isAdmin }) {
   const [form, setForm] = useState(settings);
   useEffect(() => setForm(settings), [settings]);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
     <div className="space-y-5 max-w-2xl">
       <h2 className="text-lg font-bold" style={{ color: C.navy }}>Paramètres</h2>
+      {!isAdmin && (
+        <div className="text-xs rounded-md px-3 py-2" style={{ background: C.amberSoft, color: C.amber }}>
+          Lecture seule — seul un administrateur peut modifier les paramètres.
+        </div>
+      )}
 
+      <fieldset disabled={!isAdmin} className="space-y-5" style={{ opacity: isAdmin ? 1 : 0.7 }}>
       <div className="rounded-lg p-4 space-y-3" style={{ background: C.card, border: `1px solid ${C.border}` }}>
         <div className="font-semibold text-sm" style={{ color: C.navy }}>En-tête de facture</div>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}>
@@ -1302,8 +1320,9 @@ function SettingsTab({ settings, onSave }) {
         <div className="font-semibold text-sm" style={{ color: C.navy }}>Bas de page (mentions modifiables)</div>
         <textarea rows={3} className={inputCls} style={inputStyle} value={form.footer} onChange={(e) => set("footer", e.target.value)} />
       </div>
+      </fieldset>
 
-      <Btn icon={Check} onClick={() => onSave(form)}>Enregistrer les paramètres</Btn>
+      {isAdmin && <Btn icon={Check} onClick={() => onSave(form)}>Enregistrer les paramètres</Btn>}
     </div>
   );
 }
@@ -1569,10 +1588,10 @@ export default function App() {
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
-        {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} />}
+        {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} />}
-        {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} />}
-        {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} />}
+        {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
+        {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
       </div>
 
       {toast && (
