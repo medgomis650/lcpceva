@@ -1121,10 +1121,6 @@ async function waitForImages(node) {
 }
 
 async function invoiceNodeToPdfBlob(node) {
-  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-    import("jspdf"),
-    import("html2canvas"),
-  ]);
   await waitForImages(node);
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
   const imgData = canvas.toDataURL("image/png");
@@ -1270,8 +1266,7 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
     return inv.numero.toLowerCase().includes(qq) || inv.lines.some((l) => l.numeroConteneur.toLowerCase().includes(qq));
   }).sort((a, b) => (b.numero > a.numero ? 1 : -1));
 
-  const exportExcel = async (inv) => {
-    const XLSX = await import("xlsx");
+  const exportExcel = (inv) => {
     const rows = inv.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
       "Nature": natureLabel(l.nature), "Référence": l.reference,
