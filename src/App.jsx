@@ -232,7 +232,7 @@ function ContainerTag({ value }) {
 }
 
 /* ============================= OPERATION FORM ============================= */
-function OperationForm({ initial, tariffs, onCancel, onSave }) {
+function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
   const [nature, setNature] = useState(initial?.nature || "import");
   const [form, setForm] = useState(initial || blankOp("import"));
 
@@ -313,6 +313,17 @@ function OperationForm({ initial, tariffs, onCancel, onSave }) {
           <input list="localites" className={inputCls} style={inputStyle} value={form.localiteTarifaire} onChange={(e) => set("localiteTarifaire", e.target.value)} placeholder="ex: Dakar Port" />
           <datalist id="localites">{localites.map((l) => <option key={l} value={l} />)}</datalist>
           {localites.length === 0 && <span className="text-xs" style={{ color: C.amber }}>Aucun tarif Sympos configuré — onglet "Tarifs Sympos"</span>}
+        </Field>
+      );
+    }
+    if (key === "numeroCamion") {
+      return (
+        <Field label={label} required key={key}>
+          <select className={inputCls} style={inputStyle} value={form.numeroCamion} onChange={(e) => set("numeroCamion", e.target.value)}>
+            <option value="">— Sélectionner —</option>
+            {trucks.map((t) => <option key={t.id} value={t.numero}>{t.numero}</option>)}
+          </select>
+          {trucks.length === 0 && <span className="text-xs" style={{ color: C.amber }}>Aucun camion enregistré — onglet "Camions"</span>}
         </Field>
       );
     }
@@ -554,7 +565,7 @@ function DashboardTab({ operations, invoices }) {
 }
 
 /* ============================= OPERATIONS TAB ============================= */
-function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEndDate, isAdmin }) {
+function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete, onSetEndDate, isAdmin }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState("");
@@ -579,6 +590,7 @@ function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEn
       {showForm && (
         <OperationForm
           tariffs={tariffs}
+          trucks={trucks}
           onCancel={() => setShowForm(false)}
           onSave={(op) => { onAdd(op); setShowForm(false); }}
         />
@@ -587,6 +599,7 @@ function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEn
         <OperationForm
           initial={editing}
           tariffs={tariffs}
+          trucks={trucks}
           onCancel={() => setEditing(null)}
           onSave={(op) => { onUpdate(op); setEditing(null); }}
         />
@@ -672,6 +685,59 @@ function OperationsTab({ operations, tariffs, onAdd, onUpdate, onDelete, onSetEn
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* ============================= TRUCKS (CAMIONS) TAB ============================= */
+function TrucksTab({ trucks, onAdd, onDelete, isAdmin }) {
+  const [numero, setNumero] = useState("");
+  const valid = numero.trim() !== "" && !trucks.some((t) => t.numero.toLowerCase() === numero.trim().toLowerCase());
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold" style={{ color: C.navy }}>Camions</h2>
+        <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Seuls les camions enregistrés ici peuvent être choisis lors de la saisie d'une opération.</p>
+      </div>
+
+      {isAdmin ? (
+        <div className="rounded-lg p-4 flex flex-wrap gap-3 items-end" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+          <Field label="N° camion">
+            <input className={inputCls} style={inputStyle} value={numero} onChange={(e) => setNumero(e.target.value.toUpperCase())} placeholder="ex: DK-1234-AB" />
+          </Field>
+          <Btn
+            icon={Plus} disabled={!valid}
+            onClick={() => { onAdd({ id: uid(), numero: numero.trim() }); setNumero(""); }}
+          >
+            Ajouter
+          </Btn>
+        </div>
+      ) : (
+        <div className="text-xs rounded-md px-3 py-2" style={{ background: C.amberSoft, color: C.amber }}>
+          Lecture seule — seul un administrateur peut ajouter ou supprimer un camion.
+        </div>
+      )}
+
+      <div className="rounded-lg overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ background: C.steelSoft }}>
+              <th className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>N° camion</th>
+              {isAdmin && <th className="px-3 py-2"></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {trucks.length === 0 && <tr><td colSpan={isAdmin ? 2 : 1} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun camion enregistré.</td></tr>}
+            {trucks.map((t) => (
+              <tr key={t.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{t.numero}</td>
+                {isAdmin && <td className="px-3 py-2"><button onClick={() => onDelete(t.id)} className="p-1.5" style={{ color: C.red }}><Trash2 size={14} /></button></td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1055,6 +1121,10 @@ async function waitForImages(node) {
 }
 
 async function invoiceNodeToPdfBlob(node) {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
   await waitForImages(node);
   const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
   const imgData = canvas.toDataURL("image/png");
@@ -1200,7 +1270,8 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
     return inv.numero.toLowerCase().includes(qq) || inv.lines.some((l) => l.numeroConteneur.toLowerCase().includes(qq));
   }).sort((a, b) => (b.numero > a.numero ? 1 : -1));
 
-  const exportExcel = (inv) => {
+  const exportExcel = async (inv) => {
+    const XLSX = await import("xlsx");
     const rows = inv.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
       "Nature": natureLabel(l.nature), "Référence": l.reference,
@@ -1370,6 +1441,7 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [operations, setOperations] = useState([]);
   const [tariffs, setTariffs] = useState([]);
+  const [trucks, setTrucks] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
   const [loading, setLoading] = useState(true);
@@ -1392,11 +1464,12 @@ export default function App() {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [rawOps, tar, rawInv, set] = await Promise.all([
+      const [rawOps, tar, rawInv, set, trk] = await Promise.all([
         loadKey("ceva-operations", []),
         loadKey("ceva-sympos-tariffs", []),
         loadKey("ceva-invoices", []),
         loadKey("ceva-settings", defaultSettings),
+        loadKey("ceva-trucks", []),
       ]);
 
       // Migration: older data used "Ordre de transport", then "OT" — now "ODM".
@@ -1420,7 +1493,7 @@ export default function App() {
       if (invChanged) saveKey("ceva-invoices", inv);
 
       if (cancelled) return;
-      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set);
+      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set); setTrucks(trk);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -1453,6 +1526,15 @@ export default function App() {
   const deleteTariff = async (id) => {
     const next = tariffs.filter((t) => t.id !== id);
     setTariffs(next); await saveKey("ceva-sympos-tariffs", next);
+  };
+
+  const addTruck = async (t) => {
+    const next = [...trucks, t];
+    setTrucks(next); await saveKey("ceva-trucks", next); notify("Camion ajouté");
+  };
+  const deleteTruck = async (id) => {
+    const next = trucks.filter((t) => t.id !== id);
+    setTrucks(next); await saveKey("ceva-trucks", next);
   };
 
   const saveSettings = async (s) => {
@@ -1497,6 +1579,7 @@ export default function App() {
     { key: "newinvoice", label: "Nouvelle facture", icon: Receipt },
     { key: "invoices", label: "Factures", icon: FileText },
     { key: "tariffs", label: "Tarifs Sympos", icon: MapPin },
+    { key: "trucks", label: "Camions", icon: Truck },
     { key: "settings", label: "Paramètres", icon: Settings },
   ];
 
@@ -1587,10 +1670,11 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
-        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
+        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
+        {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
       </div>
 
