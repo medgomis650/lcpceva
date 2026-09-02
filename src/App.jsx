@@ -1129,6 +1129,12 @@ async function getLogoDataUrl() {
   return logoDataUrlCache;
 }
 
+// jsPDF's standard fonts (Helvetica/Courier) can't render the narrow no-break
+// space that toLocaleString("fr-FR") uses as a thousands separator — it shows
+// up as a stray "/" glyph. Use a plain ASCII space instead, PDF-only.
+const fmtPdfNumber = (n) => (isNaN(n) ? "0" : Math.round(Number(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " "));
+const fmtPdfAmount = (n) => fmtPdfNumber(n) + " FCFA";
+
 async function buildInvoicePdfBlob(invoice, settings) {
   let logoData = null;
   try { logoData = await getLogoDataUrl(); } catch (e) { /* logo optional */ }
@@ -1259,10 +1265,10 @@ async function buildInvoicePdfBlob(invoice, settings) {
       destination: l.destination || "",
       nature: natureLabel(l.nature),
       reference: l.reference || "",
-      ht: fmtPlain(l.ht),
-      tva: sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exon.",
-      gfc: l.gfc ? fmtPlain(l.gfc) : "—",
-      ttc: fmtPlain(l.ttc),
+      ht: fmtPdfNumber(l.ht),
+      tva: sympNatures.includes(l.nature) ? fmtPdfNumber(l.tva) : "Exon.",
+      gfc: l.gfc ? fmtPdfNumber(l.gfc) : "—",
+      ttc: fmtPdfNumber(l.ttc),
     };
     pdf.setFontSize(7.5);
     cols.forEach((c) => {
@@ -1286,14 +1292,14 @@ async function buildInvoicePdfBlob(invoice, settings) {
   let ty = y + 16;
   pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
   pdf.setTextColor(C.inkMuted); pdf.text("Total HT", totX + 10, ty);
-  pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.ht), totX + totW - 10, ty, { align: "right" });
+  pdf.setTextColor(C.ink); pdf.text(fmtPdfNumber(invoice.totals.ht), totX + totW - 10, ty, { align: "right" });
   ty += 16;
   pdf.setTextColor(C.inkMuted); pdf.text("Total TVA", totX + 10, ty);
-  pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.tva), totX + totW - 10, ty, { align: "right" });
+  pdf.setTextColor(C.ink); pdf.text(fmtPdfNumber(invoice.totals.tva), totX + totW - 10, ty, { align: "right" });
   ty += 16;
   if (hasGfc) {
     pdf.setTextColor(C.inkMuted); pdf.text("Total GFC (hors TVA)", totX + 10, ty);
-    pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.gfc), totX + totW - 10, ty, { align: "right" });
+    pdf.setTextColor(C.ink); pdf.text(fmtPdfNumber(invoice.totals.gfc), totX + totW - 10, ty, { align: "right" });
     ty += 16;
   }
   pdf.setDrawColor(C.border);
@@ -1306,7 +1312,7 @@ async function buildInvoicePdfBlob(invoice, settings) {
   pdf.setFillColor(C.invoiceBlue);
   pdf.roundedRect(totX + totW - 10 - ttcBoxW, ty - 13, ttcBoxW, ttcBoxH, 3, 3, "F");
   pdf.setTextColor("#ffffff");
-  pdf.text(fmt(invoice.totals.ttc), totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
+  pdf.text(fmtPdfAmount(invoice.totals.ttc), totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7.5);
