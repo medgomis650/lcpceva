@@ -1122,21 +1122,21 @@ async function waitForImages(node) {
 
 async function invoiceNodeToPdfBlob(node) {
   await waitForImages(node);
-  const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-  const imgData = canvas.toDataURL("image/png");
-  const pdf = new jsPDF({ unit: "pt", format: "a4" });
+  const canvas = await html2canvas(node, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
+  const imgData = canvas.toDataURL("image/jpeg", 0.85); // JPEG instead of PNG: far smaller for this kind of content, no visible loss at this quality
+  const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const imgWidth = pageWidth;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
   let heightLeft = imgHeight;
   let position = 0;
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
   while (heightLeft > 2) { // small tolerance: ignore sub-pixel overflow so it doesn't spawn a near-empty extra page
     position -= pageHeight;
     pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
   }
   return pdf.output("blob");
