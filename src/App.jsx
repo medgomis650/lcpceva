@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import logoImg from "./assets/logo.jpg";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
@@ -1114,31 +1113,210 @@ function triggerFileDownload(url, filename) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// Renders the given DOM node (the invoice) to a real, multi-page-aware PDF blob.
-async function waitForImages(node) {
-  const imgs = Array.from(node.querySelectorAll("img"));
-  await Promise.all(imgs.map((img) => (img.complete ? Promise.resolve() : new Promise((res) => { img.onload = res; img.onerror = res; }))));
+// Real, vector-based PDF: actual selectable/crisp text drawn with jsPDF, not a
+// rasterized screenshot. Sharper at any zoom level and far lighter in file size.
+let logoDataUrlCache = null;
+async function getLogoDataUrl() {
+  if (logoDataUrlCache) return logoDataUrlCache;
+  const res = await fetch(logoImg);
+  const blob = await res.blob();
+  logoDataUrlCache = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  return logoDataUrlCache;
 }
 
-async function invoiceNodeToPdfBlob(node) {
-  await waitForImages(node);
-  const canvas = await html2canvas(node, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
-  const imgData = canvas.toDataURL("image/jpeg", 0.85); // JPEG instead of PNG: far smaller for this kind of content, no visible loss at this quality
+async function buildInvoicePdfBlob(invoice, settings) {
+  let logoData = null;
+  try { logoData = await getLogoDataUrl(); } catch (e) { /* logo optional */ }
+
   const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  let heightLeft = imgHeight;
-  let position = 0;
-  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-  while (heightLeft > 2) { // small tolerance: ignore sub-pixel overflow so it doesn't spawn a near-empty extra page
-    position -= pageHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+  const margin = 40;
+  const contentWidth = pageWidth - margin * 2;
+
+  const cols = [
+    { key: "numeroConteneur", label: "N° CONTENEUR", w: 78, mono: true },
+    { key: "typeConteneur", label: "TYPE", w: 42 },
+    { key: "destination", label: "DESTINATION", w: 66 },
+    { key: "nature", label: "NATURE", w: 52 },
+    { key: "reference", label: "RÉFÉRENCE", w: 66 },
+    { key: "ht", label: "HT", w: 48, align: "right" },
+    { key: "tva", label: "TVA 18%", w: 46, align: "right" },
+    { key: "gfc", label: "GFC", w: 38, align: "right" },
+    { key: "ttc", label: "TTC", w: 52, align: "right" },
+  ];
+  const rawTotal = cols.reduce((s, c) => s + c.w, 0);
+  const scale = contentWidth / rawTotal;
+  let cx = margin;
+  cols.forEach((c) => { c.w *= scale; c.x = cx; cx += c.w; });
+
+  let y = margin;
+
+  function drawTopBar() {
+    pdf.setFillColor(C.orange);
+    pdf.rect(0, 0, pageWidth / 2, 5, "F");
+    pdf.setFillColor(C.invoiceBlue);
+    pdf.rect(pageWidth / 2, 0, pageWidth / 2, 5, "F");
   }
+
+  function drawHeader() {
+    drawTopBar();
+    y = margin;
+    if (logoData) {
+      try { pdf.addImage(logoData, "JPEG", margin, y, 46, 46); } catch (e) { /* ignore bad image */ }
+    }
+    const textX = margin + 56;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(13);
+    pdf.setTextColor(C.invoiceBlue);
+    pdf.text(settings.companyName || "", textX, y + 14);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    [settings.address, `Tél: ${settings.phone} · ${settings.email}`, `${settings.ninea} · ${settings.rccm}`]
+      .forEach((line, i) => pdf.text(line || "", textX, y + 27 + i * 10));
+
+    const boxW = 130, boxH = 20;
+    const boxX = pageWidth - margin - boxW;
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text("FACTURE", boxX + boxW, y - 2, { align: "right" });
+    pdf.setFillColor(C.invoiceBlueSoft);
+    pdf.roundedRect(boxX, y + 2, boxW, boxH, 3, 3, "F");
+    pdf.setFont("courier", "bold");
+    pdf.setFontSize(11);
+    pdf.setTextColor(C.invoiceBlue);
+    pdf.text(invoice.numero, boxX + boxW / 2, y + 2 + boxH / 2 + 4, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text(`Émise le ${invoice.date}`, boxX + boxW, y + 2 + boxH + 12, { align: "right" });
+
+    y += 60;
+    pdf.setDrawColor(C.border);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 20;
+
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text("FACTURÉ À", margin, y);
+    y += 12;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.setTextColor(C.invoiceBlue);
+    pdf.text(settings.clientName || "", margin, y);
+    y += 12;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text(settings.clientAddress || "", margin, y);
+    y += 18;
+  }
+
+  function drawTableHeader() {
+    pdf.setFillColor(C.invoiceBlue);
+    pdf.rect(margin, y, contentWidth, 18, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    pdf.setTextColor("#ffffff");
+    cols.forEach((c) => {
+      const tx = c.align === "right" ? c.x + c.w - 4 : c.x + 4;
+      pdf.text(c.label, tx, y + 12, { align: c.align === "right" ? "right" : "left" });
+    });
+    y += 18;
+  }
+
+  function truncate(text, colWidth) {
+    const s = String(text ?? "");
+    const maxChars = Math.max(3, Math.floor(colWidth / 3.6));
+    return s.length > maxChars ? s.slice(0, maxChars - 1) + "…" : s;
+  }
+
+  drawHeader();
+  drawTableHeader();
+
+  const rowH = 16;
+  invoice.lines.forEach((l, i) => {
+    if (y + rowH > pageHeight - 90) {
+      pdf.addPage();
+      y = margin;
+      drawTopBar();
+      y = margin;
+      drawTableHeader();
+    }
+    if (i % 2 === 1) {
+      pdf.setFillColor(C.steelSoft);
+      pdf.rect(margin, y, contentWidth, rowH, "F");
+    }
+    const vals = {
+      numeroConteneur: l.numeroConteneur || "—",
+      typeConteneur: l.typeConteneur || "",
+      destination: l.destination || "",
+      nature: natureLabel(l.nature),
+      reference: l.reference || "",
+      ht: fmtPlain(l.ht),
+      tva: sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exon.",
+      gfc: l.gfc ? fmtPlain(l.gfc) : "—",
+      ttc: fmtPlain(l.ttc),
+    };
+    pdf.setFontSize(7.5);
+    cols.forEach((c) => {
+      if (c.key === "numeroConteneur") { pdf.setFont("courier", "bold"); pdf.setTextColor(C.ink); }
+      else if (c.key === "ttc") { pdf.setFont("helvetica", "bold"); pdf.setTextColor(C.invoiceBlue); }
+      else { pdf.setFont("helvetica", "normal"); pdf.setTextColor(C.ink); }
+      const tx = c.align === "right" ? c.x + c.w - 4 : c.x + 4;
+      pdf.text(truncate(vals[c.key], c.w), tx, y + 11, { align: c.align === "right" ? "right" : "left" });
+    });
+    y += rowH;
+  });
+
+  y += 14;
+  const totW = 200;
+  const totX = pageWidth - margin - totW;
+  const hasGfc = !!invoice.totals.gfc;
+  const totH = hasGfc ? 90 : 74;
+  if (y + totH + 20 > pageHeight - 60) { pdf.addPage(); drawTopBar(); y = margin; }
+  pdf.setFillColor(C.steelSoft);
+  pdf.roundedRect(totX, y, totW, totH, 4, 4, "F");
+  let ty = y + 16;
+  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+  pdf.setTextColor(C.inkMuted); pdf.text("Total HT", totX + 10, ty);
+  pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.ht), totX + totW - 10, ty, { align: "right" });
+  ty += 16;
+  pdf.setTextColor(C.inkMuted); pdf.text("Total TVA", totX + 10, ty);
+  pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.tva), totX + totW - 10, ty, { align: "right" });
+  ty += 16;
+  if (hasGfc) {
+    pdf.setTextColor(C.inkMuted); pdf.text("Total GFC (hors TVA)", totX + 10, ty);
+    pdf.setTextColor(C.ink); pdf.text(fmtPlain(invoice.totals.gfc), totX + totW - 10, ty, { align: "right" });
+    ty += 16;
+  }
+  pdf.setDrawColor(C.border);
+  pdf.line(totX + 10, ty, totX + totW - 10, ty);
+  ty += 18;
+  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
+  pdf.setTextColor(C.invoiceBlue);
+  pdf.text("Total TTC", totX + 10, ty);
+  const ttcBoxW = 110, ttcBoxH = 18;
+  pdf.setFillColor(C.invoiceBlue);
+  pdf.roundedRect(totX + totW - 10 - ttcBoxW, ty - 13, ttcBoxW, ttcBoxH, 3, 3, "F");
+  pdf.setTextColor("#ffffff");
+  pdf.text(fmt(invoice.totals.ttc), totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(C.inkMuted);
+  pdf.setDrawColor(C.border);
+  const footerY = pageHeight - 50;
+  pdf.line(margin, footerY, pageWidth - margin, footerY);
+  const footerLines = pdf.splitTextToSize(settings.footer || "", contentWidth);
+  footerLines.forEach((line, i) => pdf.text(line, margin, footerY + 14 + i * 10));
+
   return pdf.output("blob");
 }
 
@@ -1185,7 +1363,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
   const handleDownloadPdf = async () => {
     setBusy("pdf");
     try {
-      const blob = await invoiceNodeToPdfBlob(docRef.current);
+      const blob = await buildInvoicePdfBlob(invoice, settings);
       const url = URL.createObjectURL(blob);
       triggerFileDownload(url, `${invoice.numero}.pdf`);
       setTimeout(() => URL.revokeObjectURL(url), 30000);
@@ -1199,7 +1377,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
     setBusy("drive");
     setDriveStatus(null);
     try {
-      const blob = await invoiceNodeToPdfBlob(docRef.current);
+      const blob = await buildInvoicePdfBlob(invoice, settings);
       await uploadBlobToDrive(blob, `${invoice.numero}.pdf`);
       setDriveStatus("ok");
     } catch (e) {
