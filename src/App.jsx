@@ -1146,15 +1146,15 @@ async function buildInvoicePdfBlob(invoice, settings) {
   const contentWidth = pageWidth - margin * 2;
 
   const cols = [
-    { key: "numeroConteneur", label: "N° CONTENEUR", w: 78, mono: true },
-    { key: "typeConteneur", label: "TYPE", w: 42 },
-    { key: "destination", label: "DESTINATION", w: 66 },
-    { key: "nature", label: "NATURE", w: 52 },
-    { key: "reference", label: "RÉFÉRENCE", w: 66 },
-    { key: "ht", label: "HT", w: 48, align: "right" },
-    { key: "tva", label: "TVA 18%", w: 46, align: "right" },
-    { key: "gfc", label: "GFC", w: 38, align: "right" },
-    { key: "ttc", label: "TTC", w: 52, align: "right" },
+    { key: "numeroConteneur", label: "N° CONTENEUR", w: 72, mono: true },
+    { key: "typeConteneur", label: "TYPE", w: 32 },
+    { key: "destination", label: "DESTINATION", w: 50 },
+    { key: "nature", label: "NATURE", w: 45 },
+    { key: "reference", label: "RÉFÉRENCE", w: 95 },
+    { key: "ht", label: "HT", w: 44, align: "right" },
+    { key: "tva", label: "TVA 18%", w: 40, align: "right" },
+    { key: "gfc", label: "GFC", w: 32, align: "right" },
+    { key: "ttc", label: "TTC", w: 46, align: "right" },
   ];
   const rawTotal = cols.reduce((s, c) => s + c.w, 0);
   const scale = contentWidth / rawTotal;
@@ -1286,7 +1286,7 @@ async function buildInvoicePdfBlob(invoice, settings) {
       else { pdf.setFont("helvetica", "normal"); pdf.setTextColor(C.ink); }
       let size = 7.5;
       pdf.setFontSize(size);
-      const maxW = c.w - (c.key === "reference" ? 16 : 8); // extra breathing room after Référence, before HT
+      const maxW = c.w - 8; // padding on both sides
       // shrink slightly before truncating, so numbers stay whole when possible
       while (pdf.getTextWidth(String(vals[c.key])) > maxW && size > 6) { size -= 0.5; pdf.setFontSize(size); }
       const text = fitTextToWidth(vals[c.key], maxW);
