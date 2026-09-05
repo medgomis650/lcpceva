@@ -1187,15 +1187,24 @@ async function buildInvoicePdfBlob(invoice, settings) {
     [settings.address, `Tél: ${settings.phone} · ${settings.email}`, `${settings.ninea} · ${settings.rccm}`]
       .forEach((line, i) => pdf.text(line || "", textX, y + 27 + i * 10));
 
-    const boxW = 130, boxH = 20;
+    pdf.setFont("courier", "bold");
+    let numFontSize = 11;
+    pdf.setFontSize(numFontSize);
+    const numPadding = 24;
+    let boxW = pdf.getTextWidth(invoice.numero) + numPadding;
+    const maxBoxW = pageWidth - margin * 2; // never wider than the page content
+    while (boxW > maxBoxW && numFontSize > 7) { numFontSize -= 0.5; pdf.setFontSize(numFontSize); boxW = pdf.getTextWidth(invoice.numero) + numPadding; }
+    boxW = Math.max(boxW, 100); // sensible minimum so short numbers don't look cramped
+    const boxH = 20;
     const boxX = pageWidth - margin - boxW;
+    pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(C.inkMuted);
     pdf.text("FACTURE", boxX + boxW, y - 2, { align: "right" });
     pdf.setFillColor(C.invoiceBlueSoft);
     pdf.roundedRect(boxX, y + 2, boxW, boxH, 3, 3, "F");
     pdf.setFont("courier", "bold");
-    pdf.setFontSize(11);
+    pdf.setFontSize(numFontSize);
     pdf.setTextColor(C.invoiceBlue);
     pdf.text(invoice.numero, boxX + boxW / 2, y + 2 + boxH / 2 + 4, { align: "center" });
     pdf.setFont("helvetica", "normal");
@@ -1237,10 +1246,11 @@ async function buildInvoicePdfBlob(invoice, settings) {
     y += 18;
   }
 
-  function truncate(text, colWidth) {
-    const s = String(text ?? "");
-    const maxChars = Math.max(3, Math.floor(colWidth / 3.6));
-    return s.length > maxChars ? s.slice(0, maxChars - 1) + "…" : s;
+  function fitTextToWidth(text, maxWidth) {
+    let s = String(text ?? "");
+    if (pdf.getTextWidth(s) <= maxWidth) return s;
+    while (s.length > 1 && pdf.getTextWidth(s + "…") > maxWidth) s = s.slice(0, -1);
+    return s + "…";
   }
 
   drawHeader();
@@ -1270,13 +1280,18 @@ async function buildInvoicePdfBlob(invoice, settings) {
       gfc: l.gfc ? fmtPdfNumber(l.gfc) : "—",
       ttc: fmtPdfNumber(l.ttc),
     };
-    pdf.setFontSize(7.5);
     cols.forEach((c) => {
       if (c.key === "numeroConteneur") { pdf.setFont("courier", "bold"); pdf.setTextColor(C.ink); }
       else if (c.key === "ttc") { pdf.setFont("helvetica", "bold"); pdf.setTextColor(C.invoiceBlue); }
       else { pdf.setFont("helvetica", "normal"); pdf.setTextColor(C.ink); }
+      let size = 7.5;
+      pdf.setFontSize(size);
+      const maxW = c.w - (c.key === "reference" ? 16 : 8); // extra breathing room after Référence, before HT
+      // shrink slightly before truncating, so numbers stay whole when possible
+      while (pdf.getTextWidth(String(vals[c.key])) > maxW && size > 6) { size -= 0.5; pdf.setFontSize(size); }
+      const text = fitTextToWidth(vals[c.key], maxW);
       const tx = c.align === "right" ? c.x + c.w - 4 : c.x + 4;
-      pdf.text(truncate(vals[c.key], c.w), tx, y + 11, { align: c.align === "right" ? "right" : "left" });
+      pdf.text(text, tx, y + 11, { align: c.align === "right" ? "right" : "left" });
     });
     y += rowH;
   });
@@ -1308,11 +1323,19 @@ async function buildInvoicePdfBlob(invoice, settings) {
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
   pdf.setTextColor(C.invoiceBlue);
   pdf.text("Total TTC", totX + 10, ty);
-  const ttcBoxW = 110, ttcBoxH = 18;
+  const ttcText = fmtPdfAmount(invoice.totals.ttc);
+  let ttcFontSize = 10;
+  pdf.setFontSize(ttcFontSize);
+  const labelW = pdf.getTextWidth("Total TTC");
+  const availW = totW - 20 - labelW - 10; // space left of the badge, after the label + a gap
+  let ttcBoxW = pdf.getTextWidth(ttcText) + 20;
+  while (ttcBoxW > availW && ttcFontSize > 7) { ttcFontSize -= 0.5; pdf.setFontSize(ttcFontSize); ttcBoxW = pdf.getTextWidth(ttcText) + 20; }
+  const ttcBoxH = 18;
   pdf.setFillColor(C.invoiceBlue);
   pdf.roundedRect(totX + totW - 10 - ttcBoxW, ty - 13, ttcBoxW, ttcBoxH, 3, 3, "F");
   pdf.setTextColor("#ffffff");
-  pdf.text(fmtPdfAmount(invoice.totals.ttc), totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
+  pdf.setFontSize(ttcFontSize);
+  pdf.text(ttcText, totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7.5);
