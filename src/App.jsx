@@ -1463,7 +1463,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
 }
 
 /* ============================= INVOICES TAB ============================= */
-function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
+function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
 
@@ -1498,21 +1498,27 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: C.steelSoft }}>
-              {["N° Facture", "Date", "Lignes", "Total TTC", ""].map((h) => (
+              {["N° Facture", "Statut", "Date", "Lignes", "Total TTC", ""].map((h) => (
                 <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune facture.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune facture.</td></tr>}
             {filtered.map((inv) => (
               <tr key={inv.id} style={{ borderTop: `1px solid ${C.border}` }}>
                 <td className="px-3 py-2 font-semibold" style={{ fontFamily: "ui-monospace, monospace", color: C.navy }}>{inv.numero}</td>
+                <td className="px-3 py-2">
+                  {inv.paid ? <Badge tone="green"><BadgeCheck size={12} /> Payée</Badge> : <Badge tone="amber">Impayée</Badge>}
+                </td>
                 <td className="px-3 py-2">{inv.date}</td>
                 <td className="px-3 py-2">{inv.lines.length}</td>
                 <td className="px-3 py-2 font-semibold">{fmt(inv.totals.ttc)}</td>
                 <td className="px-3 py-2">
-                  <div className="flex gap-1 justify-end">
+                  <div className="flex gap-1 justify-end items-center">
+                    {!inv.paid && (
+                      <Btn small kind="primary" icon={Check} onClick={() => onMarkPaid(inv.id)}>Payée</Btn>
+                    )}
                     <button
                       title="Aperçu"
                       onClick={() => setActive(inv)}
@@ -1746,7 +1752,7 @@ export default function App() {
   const createInvoice = async ({ lines, totals, opIds }) => {
     const year = new Date().getFullYear();
     const numero = `${settings.invoicePrefix}-${year}-${String(settings.nextInvoiceNumber).padStart(4, "0")}`;
-    const invoice = { id: uid(), numero, date: todayISO(), clientName: settings.clientName, lines, totals, createdAt: Date.now() };
+    const invoice = { id: uid(), numero, date: todayISO(), clientName: settings.clientName, lines, totals, paid: false, createdAt: Date.now() };
     const nextInvoices = [...invoices, invoice];
     const nextOps = operations.map((o) => opIds.includes(o.id) ? { ...o, facturee: true, factureId: invoice.id, factureNumero: numero } : o);
     const nextSettings = { ...settings, nextInvoiceNumber: settings.nextInvoiceNumber + 1 };
@@ -1773,6 +1779,15 @@ export default function App() {
       saveKey("ceva-invoices", nextInvoices),
     ]);
     notify(`Facture ${inv.numero} supprimée`);
+  };
+
+  const markInvoicePaid = async (invoiceId) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return;
+    const next = invoices.map((i) => (i.id === invoiceId ? { ...i, paid: true } : i));
+    setInvoices(next);
+    await saveKey("ceva-invoices", next);
+    notify(`Facture ${inv.numero} marquée comme payée`);
   };
 
   const tabs = [
@@ -1874,7 +1889,7 @@ export default function App() {
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
-        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} />}
+        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
         {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
