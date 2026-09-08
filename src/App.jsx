@@ -42,7 +42,7 @@ const NATURES = [
 ];
 const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
 const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20% remise
-const tvaNatures = ["import"]; // only import is subject to the 18% TVA — export is exempt
+const tvaNatures = ["import", "export"]; // both import and export are subject to the 18% TVA
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
 
 const FIELD_LABELS = {
