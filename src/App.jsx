@@ -227,13 +227,37 @@ function ContainerTag({ value }) {
 }
 
 /* ============================= OPERATION FORM ============================= */
+const DRAFT_KEY = "ceva-operation-draft";
+function loadOperationDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function saveOperationDraft(nature, form) {
+  try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ nature, form })); } catch (e) { /* ignore quota errors */ }
+}
+function clearOperationDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+}
+
 function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
-  const [nature, setNature] = useState(initial?.nature || "import");
-  const [form, setForm] = useState(initial || blankOp("import"));
+  // Only new-entry forms (not edits of an existing operation) keep a draft —
+  // this is what survives an accidental tab switch / brief disconnect so
+  // nothing typed is ever lost.
+  const draftRef = useRef(!initial ? loadOperationDraft() : null);
+  const skipResetRef = useRef(true);
+  const [nature, setNature] = useState(initial?.nature || draftRef.current?.nature || "import");
+  const [form, setForm] = useState(initial || draftRef.current?.form || blankOp(nature));
 
   useEffect(() => {
+    if (skipResetRef.current) { skipResetRef.current = false; return; } // don't clobber a restored draft on mount
     if (!initial) setForm(blankOp(nature));
   }, [nature]);
+
+  useEffect(() => {
+    if (!initial) saveOperationDraft(nature, form);
+  }, [form, nature, initial]);
 
   const localites = useMemo(() => [...new Set(tariffs.map((t) => t.localite))].sort(), [tariffs]);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -322,12 +346,27 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
     );
   };
 
+  const handleCancel = () => {
+    if (!initial) clearOperationDraft();
+    onCancel();
+  };
+  const handleSave = () => {
+    if (!initial) clearOperationDraft();
+    onSave({ ...form, nature });
+  };
+
   return (
     <div className="rounded-lg p-5" style={{ background: C.card, border: `1px solid ${C.border}` }}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-bold text-base" style={{ color: C.navy }}>{initial ? "Modifier l'opération" : "Nouvelle opération"}</h3>
-        <button onClick={onCancel} className="opacity-60 hover:opacity-100"><X size={18} /></button>
+        <button onClick={handleCancel} className="opacity-60 hover:opacity-100"><X size={18} /></button>
       </div>
+
+      {!initial && draftRef.current && (
+        <div className="text-xs rounded-md px-3 py-2 mb-4" style={{ background: C.amberSoft, color: C.amber }}>
+          Brouillon restauré automatiquement (saisie précédente non terminée).
+        </div>
+      )}
 
       <div className="mb-4">
         <span className="text-xs font-semibold uppercase tracking-wide block mb-2" style={{ color: C.inkMuted }}>Type d'opération *</span>
@@ -354,8 +393,8 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
       </div>
 
       <div className="flex justify-end gap-2 mt-5 pt-4" style={{ borderTop: `1px solid ${C.border}` }}>
-        <Btn kind="ghost" onClick={onCancel}>Annuler</Btn>
-        <Btn kind="primary" icon={Check} disabled={!requiredOk} onClick={() => onSave({ ...form, nature })}>
+        <Btn kind="ghost" onClick={handleCancel}>Annuler</Btn>
+        <Btn kind="primary" icon={Check} disabled={!requiredOk} onClick={handleSave}>
           Enregistrer l'opération
         </Btn>
       </div>
@@ -1672,7 +1711,14 @@ export default function App() {
   useEffect(() => {
     if (!supabase) { setSession(null); return; }
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
+      // Supabase can fire this on tab-focus/token-refresh with a transient
+      // state; only treat an explicit sign-out as "log the user out". Any
+      // other event that still carries a session just updates it in place,
+      // so the app never unmounts (and wipes in-progress forms) on a blip.
+      if (event === "SIGNED_OUT") { setSession(null); return; }
+      if (sess) setSession(sess);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
