@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
+// xlsx and jspdf are loaded dynamically (see their call sites below) so they
+// don't bloat the initial page load — only fetched when actually used.
 import logoImg from "./assets/logo.jpg";
 import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
@@ -601,7 +601,8 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
     .filter((o) => (statusFilter === "all" ? true : statusFilter === "facturee" ? o.facturee : !o.facturee))
     .sort((a, b) => (b.date > a.date ? 1 : -1));
 
-  const exportOperationsExcel = () => {
+  const exportOperationsExcel = async () => {
+    const XLSX = await import("xlsx");
     const rows = filtered.map((o) => ({
       "Date": o.date,
       "Nature": natureLabel(o.nature),
@@ -1188,6 +1189,7 @@ const fmtPdfNumber = (n) => (isNaN(n) ? "0" : Math.round(Number(n)).toString().r
 const fmtPdfAmount = (n) => fmtPdfNumber(n) + " FCFA";
 
 async function buildInvoicePdfBlob(invoice, settings) {
+  const { default: jsPDF } = await import("jspdf");
   let logoData = null;
   try { logoData = await getLogoDataUrl(); } catch (e) { /* logo optional */ }
 
@@ -1525,7 +1527,8 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
     return inv.numero.toLowerCase().includes(qq) || inv.lines.some((l) => l.numeroConteneur.toLowerCase().includes(qq));
   }).sort((a, b) => (b.numero > a.numero ? 1 : -1));
 
-  const exportExcel = (inv) => {
+  const exportExcel = async (inv) => {
+    const XLSX = await import("xlsx");
     const rows = inv.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
       "Nature": natureLabel(l.nature), "Référence": l.reference,
