@@ -46,9 +46,7 @@ const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
 
 const FIELD_LABELS = {
   date: "Date",
-  refType: "Référence",
-  refValue: "N° référence",
-  booking: "Booking",
+  odm: "ODM",
   typeConteneur: "Type de conteneur",
   numeroConteneur: "N° conteneur",
   numeroCamion: "N° camion",
@@ -61,8 +59,8 @@ const FIELD_LABELS = {
 };
 
 const NATURE_FIELDS = {
-  import: ["date", "refType", "refValue", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
-  export: ["date", "booking", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
+  import: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
+  export: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   transfert: ["date", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "pleinVide", "tarifManuel"],
   mise_a_terre: ["date", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
 };
@@ -90,9 +88,7 @@ const blankOp = (nature) => ({
   id: null,
   nature,
   date: new Date().toISOString().slice(0, 10),
-  refType: "ODM",
-  refValue: "",
-  booking: "",
+  odm: "",
   typeConteneur: "",
   numeroConteneur: "",
   numeroCamion: "",
@@ -258,20 +254,6 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
         </Field>
       );
     }
-    if (key === "refType") {
-      return (
-        <Field label={label} required key={key}>
-          <div className="flex gap-2">
-            <select className={inputCls} style={inputStyle} value={form.refType} onChange={(e) => set("refType", e.target.value)}>
-              <option>ODM</option>
-              <option>N° BL</option>
-            </select>
-            <input className={inputCls} style={inputStyle} placeholder="Valeur" value={form.refValue} onChange={(e) => set("refValue", e.target.value)} />
-          </div>
-        </Field>
-      );
-    }
-    if (key === "refValue") return null;
     if (key === "typeConteneur") {
       return (
         <Field label={label} required key={key}>
@@ -568,14 +550,37 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState("");
+  const [odmQuery, setOdmQuery] = useState("");
   const [natureFilter, setNatureFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filtered = operations
     .filter((o) => (q ? o.numeroConteneur.toLowerCase().includes(q.toLowerCase()) : true))
+    .filter((o) => (odmQuery ? (o.odm || "").toLowerCase().includes(odmQuery.toLowerCase()) : true))
     .filter((o) => (natureFilter === "all" ? true : o.nature === natureFilter))
     .filter((o) => (statusFilter === "all" ? true : statusFilter === "facturee" ? o.facturee : !o.facturee))
     .sort((a, b) => (b.date > a.date ? 1 : -1));
+
+  const exportOperationsExcel = () => {
+    const rows = filtered.map((o) => ({
+      "Date": o.date,
+      "Nature": natureLabel(o.nature),
+      "N° Conteneur": o.numeroConteneur,
+      "Type": o.typeConteneur,
+      "N° Camion": o.numeroCamion || "",
+      "Client": o.client || "",
+      "Lieu de prise en charge": o.lieuPriseEnCharge || "",
+      "Destination": o.destination || "",
+      "ODM": o.odm || "",
+      "Statut facturation": o.facturee ? `Facturée (${o.factureNumero})` : "Non facturée",
+      "Date fin": o.dateFin || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Opérations");
+    const filename = odmQuery ? `ODM-${odmQuery.replace(/[^A-Za-z0-9-_]/g, "")}` : "operations";
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  };
 
   return (
     <div className="space-y-4">
@@ -611,6 +616,10 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
               <Search size={14} style={{ color: C.inkMuted }} />
               <input className="outline-none text-sm flex-1" placeholder="Rechercher un n° conteneur..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
+            <div className="flex items-center gap-2 rounded-md px-2.5 py-1.5 flex-1 min-w-[160px]" style={{ border: `1px solid ${C.border}` }}>
+              <Search size={14} style={{ color: C.inkMuted }} />
+              <input className="outline-none text-sm flex-1" placeholder="Rechercher par ODM..." value={odmQuery} onChange={(e) => setOdmQuery(e.target.value)} />
+            </div>
             <select className={inputCls} style={{ ...inputStyle, width: "auto" }} value={natureFilter} onChange={(e) => setNatureFilter(e.target.value)}>
               <option value="all">Toutes natures</option>
               {NATURES.map((n) => <option key={n.key} value={n.key}>{n.label}</option>)}
@@ -620,6 +629,9 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
               <option value="facturee">Facturées</option>
               <option value="non_facturee">Non facturées</option>
             </select>
+            <Btn small kind="ghost" icon={Download} disabled={filtered.length === 0} onClick={exportOperationsExcel}>
+              Exporter Excel
+            </Btn>
           </div>
 
           <div className="rounded-lg overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
@@ -902,7 +914,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
               {list.map((o) => {
                 const l = lineFor(o);
                 const terminee = !!o.dateFin;
-                const ref = o.nature === "import" ? `${o.refType}: ${o.refValue}` : o.nature === "export" ? `Booking: ${o.booking}` : "—";
+                const ref = o.odm ? `ODM: ${o.odm}` : "—";
                 return (
                   <tr key={o.id} style={{ borderTop: `1px solid ${C.border}`, background: selected[o.id] ? C.orangeSoft : "transparent", opacity: terminee ? 1 : 0.55 }}>
                     <td className="px-3 py-2">
@@ -972,7 +984,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
               onClick={() => {
                 const lines = selectedOps.map((o) => {
                   const l = lineFor(o);
-                  const ref = o.nature === "import" ? `${o.refType}: ${o.refValue}` : o.nature === "export" ? `Booking: ${o.booking}` : "—";
+                  const ref = o.odm ? `ODM: ${o.odm}` : "—";
                   return {
                     opId: o.id, numeroConteneur: o.numeroConteneur, typeConteneur: o.typeConteneur,
                     destination: o.destination || "—", nature: o.nature, reference: ref,
@@ -1681,17 +1693,25 @@ export default function App() {
       ]);
 
       // Migration: older data used "Ordre de transport", then "OT" — now "ODM".
+      // Also collapse the old two-field schema (refType/refValue for import,
+      // booking for export) into a single "odm" field, since every operation
+      // now uses the same ODM reference regardless of nature.
       let opsChanged = false;
       const ops = rawOps.map((o) => {
-        if (o.refType === "Ordre de transport" || o.refType === "OT") { opsChanged = true; return { ...o, refType: "ODM" }; }
-        return o;
+        let next = o;
+        if (next.refType === "Ordre de transport" || next.refType === "OT") { opsChanged = true; next = { ...next, refType: "ODM" }; }
+        if (next.odm === undefined && (next.refValue !== undefined || next.booking !== undefined)) {
+          opsChanged = true;
+          next = { ...next, odm: next.refValue || next.booking || "" };
+        }
+        return next;
       });
       let invChanged = false;
       const inv = rawInv.map((iv) => {
         const lines = iv.lines.map((l) => {
-          if (typeof l.reference === "string" && (l.reference.startsWith("Ordre de transport:") || l.reference.startsWith("OT:"))) {
+          if (typeof l.reference === "string" && /^(Ordre de transport|OT|Booking):/.test(l.reference)) {
             invChanged = true;
-            return { ...l, reference: l.reference.replace(/^(Ordre de transport|OT):/, "ODM:") };
+            return { ...l, reference: l.reference.replace(/^(Ordre de transport|OT|Booking):/, "ODM:") };
           }
           return l;
         });
