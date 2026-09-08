@@ -41,7 +41,8 @@ const NATURES = [
   { key: "mise_a_terre", label: "Mise à terre" },
 ];
 const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
-const sympNatures = ["import", "export"];
+const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20% remise
+const tvaNatures = ["import"]; // only import is subject to the 18% TVA — export is exempt
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
 
 const FIELD_LABELS = {
@@ -157,7 +158,7 @@ function computeLine(op, tarifBase) {
     const base = Number(tarifBase) || 0;
     const remise = base * 0.2;
     const netHT = base - remise;
-    const tva = netHT * 0.18;
+    const tva = tvaNatures.includes(op.nature) ? netHT * 0.18 : 0;
     return { tarifSympos: base, remise, ht: netHT, tva, ttc: netHT + tva };
   }
   const montant = Number(tarifBase) || 0;
@@ -1120,7 +1121,7 @@ function InvoiceDocument({ invoice, settings }) {
                 <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
                 <td className="px-2 py-1.5 text-xs">{fmtPlain(l.ht)}</td>
-                <td className="px-2 py-1.5 text-xs">{sympNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
+                <td className="px-2 py-1.5 text-xs">{tvaNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
                 <td className="px-2 py-1.5 text-xs">{l.gfc ? fmtPlain(l.gfc) : "—"}</td>
                 <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: C.invoiceBlue }}>{fmtPlain(l.ttc)}</td>
               </tr>
@@ -1327,7 +1328,7 @@ async function buildInvoicePdfBlob(invoice, settings) {
       nature: natureLabel(l.nature),
       reference: l.reference || "",
       ht: fmtPdfNumber(l.ht),
-      tva: sympNatures.includes(l.nature) ? fmtPdfNumber(l.tva) : "Exon.",
+      tva: tvaNatures.includes(l.nature) ? fmtPdfNumber(l.tva) : "Exon.",
       gfc: l.gfc ? fmtPdfNumber(l.gfc) : "—",
       ttc: fmtPdfNumber(l.ttc),
     };
