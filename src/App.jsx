@@ -586,7 +586,7 @@ function DashboardTab({ operations, invoices }) {
 }
 
 /* ============================= OPERATIONS TAB ============================= */
-function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete, onSetEndDate, isAdmin }) {
+function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate, onDelete, onSetEndDate, isAdmin }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState("");
@@ -594,28 +594,47 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
   const [natureFilter, setNatureFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const invoiceById = useMemo(() => Object.fromEntries((invoices || []).map((iv) => [iv.id, iv])), [invoices]);
+  const isOpPaid = (o) => o.facturee && !!invoiceById[o.factureId]?.paid;
+  const getOpMontant = (o) => {
+    if (!o.facturee) return null;
+    const inv = invoiceById[o.factureId];
+    const line = inv?.lines.find((l) => l.opId === o.id);
+    return line ? line.ttc : null;
+  };
+
   const filtered = operations
     .filter((o) => (q ? o.numeroConteneur.toLowerCase().includes(q.toLowerCase()) : true))
     .filter((o) => (odmQuery ? (o.odm || "").toLowerCase().includes(odmQuery.toLowerCase()) : true))
     .filter((o) => (natureFilter === "all" ? true : o.nature === natureFilter))
-    .filter((o) => (statusFilter === "all" ? true : statusFilter === "facturee" ? o.facturee : !o.facturee))
+    .filter((o) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "payee") return isOpPaid(o);
+      if (statusFilter === "facturee") return o.facturee && !isOpPaid(o);
+      return !o.facturee; // non_facturee
+    })
     .sort((a, b) => (b.date > a.date ? 1 : -1));
 
   const exportOperationsExcel = async () => {
     const XLSX = await import("xlsx");
-    const rows = filtered.map((o) => ({
-      "Date": o.date,
-      "Nature": natureLabel(o.nature),
-      "N° Conteneur": o.numeroConteneur,
-      "Type": o.typeConteneur,
-      "N° Camion": o.numeroCamion || "",
-      "Client": o.client || "",
-      "Lieu de prise en charge": o.lieuPriseEnCharge || "",
-      "Destination": o.destination || "",
-      "ODM": o.odm || "",
-      "Statut facturation": o.facturee ? `Facturée (${o.factureNumero})` : "Non facturée",
-      "Date fin": o.dateFin || "",
-    }));
+    const rows = filtered.map((o) => {
+      const montant = getOpMontant(o);
+      const statut = isOpPaid(o) ? `Payée (${o.factureNumero})` : o.facturee ? `Facturée (${o.factureNumero})` : "Non facturée";
+      return {
+        "Date": o.date,
+        "Nature": natureLabel(o.nature),
+        "N° Conteneur": o.numeroConteneur,
+        "Type": o.typeConteneur,
+        "N° Camion": o.numeroCamion || "",
+        "Client": o.client || "",
+        "Lieu de prise en charge": o.lieuPriseEnCharge || "",
+        "Destination": o.destination || "",
+        "ODM": o.odm || "",
+        "Statut facturation": statut,
+        "Montant": montant !== null ? montant : "",
+        "Date fin": o.dateFin || "",
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Opérations");
@@ -667,7 +686,8 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
             </select>
             <select className={inputCls} style={{ ...inputStyle, width: "auto" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="all">Tous statuts</option>
-              <option value="facturee">Facturées</option>
+              <option value="payee">Payées</option>
+              <option value="facturee">Facturées (non payées)</option>
               <option value="non_facturee">Non facturées</option>
             </select>
             <Btn small kind="ghost" icon={Download} disabled={filtered.length === 0} onClick={exportOperationsExcel}>
@@ -700,9 +720,13 @@ function OperationsTab({ operations, tariffs, trucks, onAdd, onUpdate, onDelete,
                       <td className="px-3 py-2">{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</td>
                       <td className="px-3 py-2"><EndDateCell op={o} onSet={onSetEndDate} /></td>
                       <td className="px-3 py-2">
-                        {o.facturee
-                          ? <Badge tone="green"><BadgeCheck size={12} /> {o.factureNumero}</Badge>
-                          : <Badge tone="amber">Non facturée</Badge>}
+                        {!o.facturee ? (
+                          <Badge tone="amber">Non facturée</Badge>
+                        ) : isOpPaid(o) ? (
+                          <Badge tone="green"><BadgeCheck size={12} /> Payée ({o.factureNumero})</Badge>
+                        ) : (
+                          <Badge tone="steel">{o.factureNumero}</Badge>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1 justify-end">
@@ -2000,7 +2024,7 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
-        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
+        {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} invoices={invoices} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
