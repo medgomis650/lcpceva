@@ -1520,12 +1520,31 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
 function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
+  const [selectedIds, setSelectedIds] = useState({});
 
   const filtered = invoices.filter((inv) => {
     if (!q) return true;
     const qq = q.toLowerCase();
     return inv.numero.toLowerCase().includes(qq) || inv.lines.some((l) => l.numeroConteneur.toLowerCase().includes(qq));
   }).sort((a, b) => (b.numero > a.numero ? 1 : -1));
+
+  const toggleSelect = (id) => setSelectedIds((s) => ({ ...s, [id]: !s[id] }));
+  const allFilteredSelected = filtered.length > 0 && filtered.every((inv) => selectedIds[inv.id]);
+  const toggleSelectAll = () => {
+    setSelectedIds((s) => {
+      const next = { ...s };
+      filtered.forEach((inv) => { next[inv.id] = !allFilteredSelected; });
+      return next;
+    });
+  };
+  const selectedInvoices = filtered.filter((inv) => selectedIds[inv.id]);
+  const selectedTotals = selectedInvoices.reduce(
+    (acc, inv) => {
+      acc.ht += inv.totals.ht; acc.tva += inv.totals.tva; acc.gfc += inv.totals.gfc || 0; acc.ttc += inv.totals.ttc;
+      return acc;
+    },
+    { ht: 0, tva: 0, gfc: 0, ttc: 0 }
+  );
 
   const exportExcel = async (inv) => {
     const XLSX = await import("xlsx");
@@ -1553,15 +1572,20 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: C.steelSoft }}>
-              {["N° Facture", "Statut", "Date", "Lignes", "Total TTC", ""].map((h) => (
-                <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
+              {["", "N° Facture", "Statut", "Date", "Lignes", "Total TTC", ""].map((h, i) => (
+                <th key={i} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>
+                  {h === "" && i === 0 ? (
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Tout sélectionner" />
+                  ) : h}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune facture.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune facture.</td></tr>}
             {filtered.map((inv) => (
-              <tr key={inv.id} style={{ borderTop: `1px solid ${C.border}` }}>
+              <tr key={inv.id} style={{ borderTop: `1px solid ${C.border}`, background: selectedIds[inv.id] ? C.orangeSoft : "transparent" }}>
+                <td className="px-3 py-2"><input type="checkbox" checked={!!selectedIds[inv.id]} onChange={() => toggleSelect(inv.id)} /></td>
                 <td className="px-3 py-2 font-semibold" style={{ fontFamily: "ui-monospace, monospace", color: C.navy }}>{inv.numero}</td>
                 <td className="px-3 py-2">
                   {inv.paid ? <Badge tone="green"><BadgeCheck size={12} /> Payée</Badge> : <Badge tone="amber">Impayée</Badge>}
@@ -1601,6 +1625,25 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
           </tbody>
         </table>
       </div>
+
+      {selectedInvoices.length > 0 && (
+        <div className="rounded-lg p-4 flex flex-wrap items-center justify-between gap-3" style={{ background: C.navy, color: "#fff" }}>
+          <div className="text-sm opacity-80">{selectedInvoices.length} facture(s) sélectionnée(s)</div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div>Total HT <b className="text-base">{fmt(selectedTotals.ht)}</b></div>
+            <div>Total TVA <b className="text-base" style={{ color: C.orangeSoft }}>{fmt(selectedTotals.tva)}</b></div>
+            {selectedTotals.gfc > 0 && <div>Total GFC <b className="text-base">{fmt(selectedTotals.gfc)}</b></div>}
+            <div>Total TTC <b className="text-base">{fmt(selectedTotals.ttc)}</b></div>
+          </div>
+          <button
+            onClick={() => setSelectedIds({})}
+            className="text-sm px-3 py-1.5 rounded-md font-medium hover:opacity-80"
+            style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}
+          >
+            Désélectionner
+          </button>
+        </div>
+      )}
 
       {active && <InvoiceModal invoice={active} settings={settings} onExportExcel={exportExcel} onClose={() => setActive(null)} />}
     </div>
