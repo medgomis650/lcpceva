@@ -600,7 +600,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
     if (!o.facturee) return null;
     const inv = invoiceById[o.factureId];
     const line = inv?.lines.find((l) => l.opId === o.id);
-    return line ? line.ttc : null;
+    return line ? line.ht + (line.gfc || 0) : null; // HT (hors TVA) + GFC si présent
   };
 
   const filtered = operations
@@ -631,7 +631,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
         "Destination": o.destination || "",
         "ODM": o.odm || "",
         "Statut facturation": statut,
-        "Montant": montant !== null ? montant : "",
+        "Montant HT": montant !== null ? montant : "",
         "Date fin": o.dateFin || "",
       };
     });
