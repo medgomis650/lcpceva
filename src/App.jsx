@@ -327,7 +327,7 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
         <Field label={label} required key={key}>
           <select className={inputCls} style={inputStyle} value={form.numeroCamion} onChange={(e) => set("numeroCamion", e.target.value)}>
             <option value="">— Sélectionner —</option>
-            {trucks.map((t) => <option key={t.id} value={t.numero}>{t.numero}</option>)}
+            {trucks.map((t) => <option key={t.id} value={t.numero}>{t.numero}{t.chauffeur ? ` — ${t.chauffeur}` : ""}</option>)}
           </select>
           {trucks.length === 0 && <span className="text-xs" style={{ color: C.amber }}>Aucun camion enregistré — onglet "Camions"</span>}
         </Field>
@@ -595,6 +595,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
   const [statusFilter, setStatusFilter] = useState("all");
 
   const invoiceById = useMemo(() => Object.fromEntries((invoices || []).map((iv) => [iv.id, iv])), [invoices]);
+  const chauffeurByNumero = useMemo(() => Object.fromEntries((trucks || []).map((t) => [t.numero, t.chauffeur])), [trucks]);
   const isOpPaid = (o) => o.facturee && !!invoiceById[o.factureId]?.paid;
   const getOpMontant = (o) => {
     if (!o.facturee) return null;
@@ -626,6 +627,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
         "N° Conteneur": o.numeroConteneur,
         "Type": o.typeConteneur,
         "N° Camion": o.numeroCamion || "",
+        "Chauffeur": (o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "",
         "Client": o.client || "",
         "Lieu de prise en charge": o.lieuPriseEnCharge || "",
         "Destination": o.destination || "",
@@ -700,14 +702,14 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: C.steelSoft }}>
-                    {["Date", "Nature", "Conteneur", "Type", "N° camion", "Client", "Lieu / Destination", "Date fin / Durée", "Statut", ""].map((h) => (
+                    {["Date", "Nature", "Conteneur", "Type", "N° camion", "Chauffeur", "Client", "Lieu / Destination", "Date fin / Durée", "Statut", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={10} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</td></tr>
+                    <tr><td colSpan={11} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</td></tr>
                   )}
                   {filtered.map((o) => (
                     <tr key={o.id} style={{ borderTop: `1px solid ${C.border}` }}>
@@ -716,6 +718,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                       <td className="px-3 py-2"><ContainerTag value={o.numeroConteneur} /></td>
                       <td className="px-3 py-2 whitespace-nowrap">{o.typeConteneur}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{o.numeroCamion || "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{(o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{o.client || "—"}</td>
                       <td className="px-3 py-2">{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</td>
                       <td className="px-3 py-2"><EndDateCell op={o} onSet={onSetEndDate} /></td>
@@ -766,15 +769,55 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
 }
 
 /* ============================= TRUCKS (CAMIONS) TAB ============================= */
-function TrucksTab({ trucks, onAdd, onDelete, isAdmin }) {
+function TruckRow({ t, isAdmin, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [chauffeur, setChauffeur] = useState(t.chauffeur || "");
+
+  if (editing) {
+    return (
+      <tr style={{ borderTop: `1px solid ${C.border}` }}>
+        <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{t.numero}</td>
+        <td className="px-3 py-2">
+          <div className="flex gap-2 items-center">
+            <input
+              autoFocus className="rounded px-2 py-1 text-sm flex-1" style={inputStyle}
+              value={chauffeur} onChange={(e) => setChauffeur(e.target.value)}
+              placeholder="Nom du chauffeur"
+            />
+            <button title="Enregistrer" onClick={() => { onUpdate(t.id, chauffeur.trim()); setEditing(false); }} className="p-1.5" style={{ color: C.green }}><Check size={14} /></button>
+            <button title="Annuler" onClick={() => { setChauffeur(t.chauffeur || ""); setEditing(false); }} className="p-1.5" style={{ color: C.inkMuted }}><X size={14} /></button>
+          </div>
+        </td>
+        <td className="px-3 py-2"></td>
+      </tr>
+    );
+  }
+  return (
+    <tr style={{ borderTop: `1px solid ${C.border}` }}>
+      <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{t.numero}</td>
+      <td className="px-3 py-2">{t.chauffeur || <span style={{ color: C.inkMuted }}>—</span>}</td>
+      {isAdmin && (
+        <td className="px-3 py-2">
+          <div className="flex gap-1 justify-end">
+            <button title="Modifier le chauffeur" onClick={() => setEditing(true)} className="p-1.5" style={{ color: C.steel }}><Pencil size={14} /></button>
+            <button title="Supprimer" onClick={() => onDelete(t.id)} className="p-1.5" style={{ color: C.red }}><Trash2 size={14} /></button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function TrucksTab({ trucks, onAdd, onUpdate, onDelete, isAdmin }) {
   const [numero, setNumero] = useState("");
+  const [chauffeur, setChauffeur] = useState("");
   const valid = numero.trim() !== "" && !trucks.some((t) => t.numero.toLowerCase() === numero.trim().toLowerCase());
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-bold" style={{ color: C.navy }}>Camions</h2>
-        <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Seuls les camions enregistrés ici peuvent être choisis lors de la saisie d'une opération.</p>
+        <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Seuls les camions enregistrés ici peuvent être choisis lors de la saisie d'une opération. Associez un chauffeur à chaque camion pour toujours savoir qui conduit quoi.</p>
       </div>
 
       {isAdmin ? (
@@ -782,16 +825,19 @@ function TrucksTab({ trucks, onAdd, onDelete, isAdmin }) {
           <Field label="N° camion">
             <input className={inputCls} style={inputStyle} value={numero} onChange={(e) => setNumero(e.target.value.toUpperCase())} placeholder="ex: DK-1234-AB" />
           </Field>
+          <Field label="Chauffeur (optionnel)">
+            <input className={inputCls} style={inputStyle} value={chauffeur} onChange={(e) => setChauffeur(e.target.value)} placeholder="ex: Moussa Diop" />
+          </Field>
           <Btn
             icon={Plus} disabled={!valid}
-            onClick={() => { onAdd({ id: uid(), numero: numero.trim() }); setNumero(""); }}
+            onClick={() => { onAdd({ id: uid(), numero: numero.trim(), chauffeur: chauffeur.trim() }); setNumero(""); setChauffeur(""); }}
           >
             Ajouter
           </Btn>
         </div>
       ) : (
         <div className="text-xs rounded-md px-3 py-2" style={{ background: C.amberSoft, color: C.amber }}>
-          Lecture seule — seul un administrateur peut ajouter ou supprimer un camion.
+          Lecture seule — seul un administrateur peut ajouter, modifier ou supprimer un camion.
         </div>
       )}
 
@@ -800,16 +846,14 @@ function TrucksTab({ trucks, onAdd, onDelete, isAdmin }) {
           <thead>
             <tr style={{ background: C.steelSoft }}>
               <th className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>N° camion</th>
+              <th className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>Chauffeur</th>
               {isAdmin && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody>
-            {trucks.length === 0 && <tr><td colSpan={isAdmin ? 2 : 1} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun camion enregistré.</td></tr>}
+            {trucks.length === 0 && <tr><td colSpan={isAdmin ? 3 : 2} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun camion enregistré.</td></tr>}
             {trucks.map((t) => (
-              <tr key={t.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{t.numero}</td>
-                {isAdmin && <td className="px-3 py-2"><button onClick={() => onDelete(t.id)} className="p-1.5" style={{ color: C.red }}><Trash2 size={14} /></button></td>}
-              </tr>
+              <TruckRow key={t.id} t={t} isAdmin={isAdmin} onUpdate={onUpdate} onDelete={onDelete} />
             ))}
           </tbody>
         </table>
@@ -1877,6 +1921,10 @@ export default function App() {
     const next = [...trucks, t];
     setTrucks(next); await saveKey("ceva-trucks", next); notify("Camion ajouté");
   };
+  const updateTruck = async (id, chauffeur) => {
+    const next = trucks.map((t) => (t.id === id ? { ...t, chauffeur } : t));
+    setTrucks(next); await saveKey("ceva-trucks", next); notify("Chauffeur mis à jour");
+  };
   const deleteTruck = async (id) => {
     const next = trucks.filter((t) => t.id !== id);
     setTrucks(next); await saveKey("ceva-trucks", next);
@@ -2028,7 +2076,7 @@ export default function App() {
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
-        {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
+        {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onUpdate={updateTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
       </div>
 
