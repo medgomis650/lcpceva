@@ -44,6 +44,7 @@ const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
 const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20% remise
 const tvaNatures = ["import", "export"]; // both import and export are subject to the 18% TVA
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
+const isGfcEligible = (op) => (op.lieuPriseEnCharge || "").trim().toUpperCase() === "DPW";
 
 const FIELD_LABELS = {
   date: "Date",
@@ -961,7 +962,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : op.tarifManuel;
     }
     const c = computeLine(op, base || 0);
-    const gfc = gfcSelected[op.id] ? GFC_AMOUNT : 0;
+    const gfc = gfcSelected[op.id] && isGfcEligible(op) ? GFC_AMOUNT : 0;
     return { ...c, base, gfc, ttc: c.ttc + gfc, missing: base === null || base === undefined || base === "" };
   };
 
@@ -1052,8 +1053,8 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
                       ) : "—"}
                     </td>
                     <td className="px-3 py-2">
-                      {selected[o.id] ? (
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Frais GFC 1 500 FCFA, hors TVA, optionnel">
+                      {selected[o.id] && isGfcEligible(o) ? (
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Frais GFC 1 500 FCFA, hors TVA, optionnel (uniquement pour un lieu de prise en charge DPW)">
                           <input type="checkbox" checked={!!gfcSelected[o.id]} onChange={() => toggleGfc(o.id)} />
                           1 500
                         </label>
