@@ -1237,17 +1237,17 @@ function AvoirDocument({ avoir, settings }) {
       id="avoir-print-area"
       className="rounded-xl overflow-hidden"
       style={{
-        background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(179,65,44,0.10)",
+        background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(30,58,138,0.10)",
         display: "flex", flexDirection: "column", aspectRatio: "210 / 297",
       }}
     >
-      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.red})` }} />
+      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.invoiceBlue})` }} />
       <div className="p-6 sm:p-9 flex flex-col flex-1">
         <div className="flex justify-between items-start gap-4 pb-6" style={{ borderBottom: `1px solid ${C.border}` }}>
           <div className="flex items-start gap-3 min-w-0">
             <img src={logoImg} alt={settings.companyName} className="shrink-0 rounded" style={{ height: 64, width: 64, objectFit: "contain" }} />
             <div className="min-w-0">
-              <div className="font-bold text-lg tracking-tight" style={{ color: C.red }}>{settings.companyName}</div>
+              <div className="font-bold text-lg tracking-tight" style={{ color: C.invoiceBlue }}>{settings.companyName}</div>
               <div className="text-xs leading-relaxed mt-0.5" style={{ color: C.inkMuted }}>
                 {settings.address}<br />
                 Tél: {settings.phone} · {settings.email}<br />
@@ -1274,7 +1274,7 @@ function AvoirDocument({ avoir, settings }) {
         <div className="flex justify-between items-start py-5">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Avoir établi à</div>
-            <div className="font-bold" style={{ color: C.red }}>{settings.clientName}</div>
+            <div className="font-bold" style={{ color: C.invoiceBlue }}>{settings.clientName}</div>
             <div className="text-xs" style={{ color: C.inkMuted }}>{settings.clientAddress}</div>
           </div>
           <div className="text-right">
@@ -1290,7 +1290,7 @@ function AvoirDocument({ avoir, settings }) {
                 <th
                   key={h}
                   className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap"
-                  style={{ color: "#fff", background: C.red, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 8 ? 8 : 0 }}
+                  style={{ color: "#fff", background: C.invoiceBlue, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 8 ? 8 : 0 }}
                 >
                   {h}
                 </th>
@@ -1321,7 +1321,7 @@ function AvoirDocument({ avoir, settings }) {
             {!!avoir.totals.gfc && (
               <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total GFC (hors TVA)</span><span>-{fmtPlain(avoir.totals.gfc)}</span></div>
             )}
-            <div className="pt-2.5 mt-1 font-bold text-base" style={{ borderTop: `1px solid ${C.border}`, color: C.red }}>
+            <div className="pt-2.5 mt-1 font-bold text-base" style={{ borderTop: `1px solid ${C.border}`, color: C.invoiceBlue }}>
               <div className="flex justify-between items-center">
                 <span>Total Avoir TTC</span>
                 <span
@@ -1621,7 +1621,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
   function drawTopBar() {
     pdf.setFillColor(C.orange);
     pdf.rect(0, 0, pageWidth / 2, 5, "F");
-    pdf.setFillColor(C.red);
+    pdf.setFillColor(C.invoiceBlue);
     pdf.rect(pageWidth / 2, 0, pageWidth / 2, 5, "F");
   }
 
@@ -1634,7 +1634,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
     const textX = margin + 56;
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(13);
-    pdf.setTextColor(C.red);
+    pdf.setTextColor(C.invoiceBlue);
     pdf.text(settings.companyName || "", textX, y + 14);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
@@ -1679,7 +1679,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
     y += 12;
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(10);
-    pdf.setTextColor(C.red);
+    pdf.setTextColor(C.invoiceBlue);
     pdf.text(settings.clientName || "", margin, y);
     pdf.setFont("courier", "bold");
     pdf.setTextColor(C.navy);
@@ -1693,7 +1693,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
   }
 
   function drawTableHeader() {
-    pdf.setFillColor(C.red);
+    pdf.setFillColor(C.invoiceBlue);
     pdf.rect(margin, y, contentWidth, 18, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7);
@@ -1779,7 +1779,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
   pdf.line(totX + 10, ty, totX + totW - 10, ty);
   ty += 18;
   pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
-  pdf.setTextColor(C.red);
+  pdf.setTextColor(C.invoiceBlue);
   pdf.text("Total Avoir TTC", totX + 10, ty);
   const ttcText = `-${fmtPdfAmount(avoir.totals.ttc)}`;
   let ttcFontSize = 10;
@@ -1920,7 +1920,7 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
 }
 
 /* ============================= AVOIR PREVIEW MODAL ============================= */
-function AvoirModal({ avoir, settings, onExportExcel, onClose }) {
+function AvoirModal({ avoir, settings, isAdmin, onExportExcel, onDelete, onClose }) {
   const [busy, setBusy] = useState(null);
   const [driveStatus, setDriveStatus] = useState(null);
   const driveConfigured = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -1971,6 +1971,16 @@ function AvoirModal({ avoir, settings, onExportExcel, onClose }) {
         <div className="flex flex-wrap items-center gap-2 justify-end px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderTop: `1px solid ${C.border}` }}>
           {driveStatus === "ok" && <span className="text-xs flex items-center gap-1" style={{ color: C.green }}><CheckCircle2 size={14} /> Envoyée sur Drive</span>}
           {driveStatus === "error" && <span className="text-xs" style={{ color: C.red }}>Échec de l'envoi vers Drive</span>}
+          {isAdmin && (
+            <button
+              title="Supprimer l'avoir (admin)"
+              onClick={() => { if (window.confirm(`Supprimer l'avoir ${avoir.numero} ?`)) onDelete(avoir.id); }}
+              className="inline-flex items-center justify-center rounded-md p-2.5 transition hover:opacity-85"
+              style={{ background: C.redSoft, color: C.red }}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
           <Btn kind="ghost" icon={Download} onClick={() => onExportExcel(avoir)}>Excel</Btn>
           <button
             title={driveConfigured ? "Enregistrer sur Google Drive" : "Google Drive non configuré — voir README"}
@@ -2221,7 +2231,7 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid, onCrea
 }
 
 /* ============================= AVOIRS TAB ============================= */
-function AvoirsTab({ avoirs, settings }) {
+function AvoirsTab({ avoirs, settings, isAdmin, onDelete }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
 
@@ -2275,16 +2285,35 @@ function AvoirsTab({ avoirs, settings }) {
                 <td className="px-3 py-2">{av.lines.length}</td>
                 <td className="px-3 py-2 font-semibold" style={{ color: C.red }}>-{fmt(av.totals.ttc)}</td>
                 <td className="px-3 py-2">
-                  <button title="Aperçu" onClick={() => setActive(av)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}>
-                    <Eye size={16} />
-                  </button>
+                  <div className="flex gap-1 justify-end">
+                    <button title="Aperçu" onClick={() => setActive(av)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}>
+                      <Eye size={16} />
+                    </button>
+                    {isAdmin && (
+                      <button
+                        title="Supprimer l'avoir (admin)"
+                        onClick={() => { if (window.confirm(`Supprimer l'avoir ${av.numero} ?`)) onDelete(av.id); }}
+                        className="p-1.5 rounded hover:opacity-70"
+                        style={{ color: C.red }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {active && <AvoirModal avoir={active} settings={settings} onExportExcel={exportExcel} onClose={() => setActive(null)} />}
+      {active && (
+        <AvoirModal
+          avoir={active} settings={settings} isAdmin={isAdmin}
+          onExportExcel={exportExcel}
+          onDelete={(id) => { onDelete(id); setActive(null); }}
+          onClose={() => setActive(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2589,6 +2618,15 @@ export default function App() {
     notify(`Avoir ${numero} créé sur ${inv.numero}`);
   };
 
+  const deleteAvoir = async (avoirId) => {
+    const av = avoirs.find((a) => a.id === avoirId);
+    if (!av) return;
+    const next = avoirs.filter((a) => a.id !== avoirId);
+    setAvoirs(next);
+    await saveKey("ceva-avoirs", next);
+    notify(`Avoir ${av.numero} supprimé`);
+  };
+
   const tabs = [
     { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { key: "operations", label: "Opérations", icon: ClipboardList },
@@ -2690,7 +2728,7 @@ export default function App() {
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} invoices={invoices} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} onCreateAvoir={createAvoir} />}
-        {tab === "avoirs" && <AvoirsTab avoirs={avoirs} settings={settings} />}
+        {tab === "avoirs" && <AvoirsTab avoirs={avoirs} settings={settings} isAdmin={isAdmin} onDelete={deleteAvoir} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
         {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onUpdate={updateTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
