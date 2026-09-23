@@ -6,7 +6,7 @@ import {
   Ship, FileText, Settings, Search, Plus, Trash2, Pencil, Printer,
   Download, X, Check, Filter, AlertTriangle, MapPin, Truck, ChevronDown,
   Lock, ClipboardList, Receipt, BadgeCheck, LayoutDashboard, Boxes, Wallet, LogOut,
-  UploadCloud, CheckCircle2, Eye, FileDown
+  UploadCloud, CheckCircle2, Eye, FileDown, FileMinus
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { loadKey, saveKey, supabaseConfigured, supabase } from "./storage";
@@ -115,6 +115,8 @@ const defaultSettings = {
   footer: "Merci de votre confiance. Paiement à réception de facture. Toute réclamation doit être formulée dans les 8 jours suivant la réception de la facture.",
   invoicePrefix: "FAC",
   nextInvoiceNumber: 1,
+  avoirPrefix: "AV",
+  nextAvoirNumber: 1,
 };
 
 const uid = () => `id_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -1228,7 +1230,120 @@ function InvoiceDocument({ invoice, settings }) {
   );
 }
 
-/* ============================= PDF EXPORT & GOOGLE DRIVE ============================= */
+/* ============================= AVOIR (CREDIT NOTE) DOCUMENT ============================= */
+function AvoirDocument({ avoir, settings }) {
+  return (
+    <div
+      id="avoir-print-area"
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: "#fff", border: `1px solid ${C.border}`, color: C.ink, boxShadow: "0 1px 3px rgba(179,65,44,0.10)",
+        display: "flex", flexDirection: "column", aspectRatio: "210 / 297",
+      }}
+    >
+      <div style={{ height: 6, background: `linear-gradient(90deg, ${C.orange}, ${C.red})` }} />
+      <div className="p-6 sm:p-9 flex flex-col flex-1">
+        <div className="flex justify-between items-start gap-4 pb-6" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <div className="flex items-start gap-3 min-w-0">
+            <img src={logoImg} alt={settings.companyName} className="shrink-0 rounded" style={{ height: 64, width: 64, objectFit: "contain" }} />
+            <div className="min-w-0">
+              <div className="font-bold text-lg tracking-tight" style={{ color: C.red }}>{settings.companyName}</div>
+              <div className="text-xs leading-relaxed mt-0.5" style={{ color: C.inkMuted }}>
+                {settings.address}<br />
+                Tél: {settings.phone} · {settings.email}<br />
+                {settings.ninea} · {settings.rccm}
+              </div>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Avoir</div>
+            <div
+              className="font-bold text-sm rounded-md"
+              style={{
+                textAlign: "center", width: 150, margin: "0 0 0 auto", padding: "6px 12px",
+                background: C.redSoft, color: C.red,
+                fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em",
+              }}
+            >
+              {avoir.numero}
+            </div>
+            <div className="text-xs mt-1.5" style={{ color: C.inkMuted }}>Émis le {avoir.date}</div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-start py-5">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>Avoir établi à</div>
+            <div className="font-bold" style={{ color: C.red }}>{settings.clientName}</div>
+            <div className="text-xs" style={{ color: C.inkMuted }}>{settings.clientAddress}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: C.inkMuted }}>En annulation de</div>
+            <div className="font-bold text-sm" style={{ fontFamily: "ui-monospace, monospace", color: C.navy }}>{avoir.originalInvoiceNumero}</div>
+          </div>
+        </div>
+
+        <table className="w-full text-sm" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+          <thead>
+            <tr>
+              {["N° Conteneur", "Type", "Destination", "Nature", "Référence", "HT", "TVA 18%", "GFC", "TTC"].map((h, i) => (
+                <th
+                  key={h}
+                  className="text-left px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap"
+                  style={{ color: "#fff", background: C.red, borderTopLeftRadius: i === 0 ? 8 : 0, borderTopRightRadius: i === 8 ? 8 : 0 }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {avoir.lines.map((l, i) => (
+              <tr key={i} style={{ background: i % 2 === 1 ? C.steelSoft : "transparent" }}>
+                <td className="px-2 py-1.5 text-xs font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
+                <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.typeConteneur}</td>
+                <td className="px-2 py-1.5 text-xs">{l.destination}</td>
+                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
+                <td className="px-2 py-1.5 text-xs">-{fmtPlain(l.ht)}</td>
+                <td className="px-2 py-1.5 text-xs">{tvaNatures.includes(l.nature) ? `-${fmtPlain(l.tva)}` : "Exonéré"}</td>
+                <td className="px-2 py-1.5 text-xs">{l.gfc ? `-${fmtPlain(l.gfc)}` : "—"}</td>
+                <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: C.red }}>-{fmtPlain(l.ttc)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="flex justify-end mt-5">
+          <div className="w-72 rounded-lg p-4 text-sm space-y-1.5" style={{ background: C.steelSoft }}>
+            <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total HT</span><span>-{fmtPlain(avoir.totals.ht)}</span></div>
+            <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total TVA</span><span>-{fmtPlain(avoir.totals.tva)}</span></div>
+            {!!avoir.totals.gfc && (
+              <div className="flex justify-between"><span style={{ color: C.inkMuted }}>Total GFC (hors TVA)</span><span>-{fmtPlain(avoir.totals.gfc)}</span></div>
+            )}
+            <div className="pt-2.5 mt-1 font-bold text-base" style={{ borderTop: `1px solid ${C.border}`, color: C.red }}>
+              <div className="flex justify-between items-center">
+                <span>Total Avoir TTC</span>
+                <span
+                  className="rounded-md inline-block"
+                  style={{ textAlign: "center", width: 150, padding: "6px 10px", background: C.red, color: "#fff" }}
+                >
+                  -{fmt(avoir.totals.ttc)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-4 text-xs" style={{ marginTop: "auto", paddingTop: 24, borderTop: `1px solid ${C.border}`, color: C.inkMuted }}>
+          Cet avoir annule et remplace la facturation des lignes ci-dessus, initialement émises sur la facture {avoir.originalInvoiceNumero}.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function triggerFileDownload(url, filename) {
   const a = document.createElement("a");
   a.href = url; a.download = filename;
@@ -1474,6 +1589,225 @@ async function buildInvoicePdfBlob(invoice, settings) {
 
 // Google Drive upload via Google Identity Services (loaded through the <script> tag
 // in index.html). Requires VITE_GOOGLE_CLIENT_ID — see README for setup.
+async function buildAvoirPdfBlob(avoir, settings) {
+  const { default: jsPDF } = await import("jspdf");
+  let logoData = null;
+  try { logoData = await getLogoDataUrl(); } catch (e) { /* logo optional */ }
+
+  const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+  const contentWidth = pageWidth - margin * 2;
+
+  const cols = [
+    { key: "numeroConteneur", label: "N° CONTENEUR", w: 72, mono: true },
+    { key: "typeConteneur", label: "TYPE", w: 32 },
+    { key: "destination", label: "DESTINATION", w: 50 },
+    { key: "nature", label: "NATURE", w: 45 },
+    { key: "reference", label: "RÉFÉRENCE", w: 95 },
+    { key: "ht", label: "HT", w: 44, align: "right" },
+    { key: "tva", label: "TVA 18%", w: 40, align: "right" },
+    { key: "gfc", label: "GFC", w: 32, align: "right" },
+    { key: "ttc", label: "TTC", w: 46, align: "right" },
+  ];
+  const rawTotal = cols.reduce((s, c) => s + c.w, 0);
+  const scale = contentWidth / rawTotal;
+  let cx = margin;
+  cols.forEach((c) => { c.w *= scale; c.x = cx; cx += c.w; });
+
+  let y = margin;
+
+  function drawTopBar() {
+    pdf.setFillColor(C.orange);
+    pdf.rect(0, 0, pageWidth / 2, 5, "F");
+    pdf.setFillColor(C.red);
+    pdf.rect(pageWidth / 2, 0, pageWidth / 2, 5, "F");
+  }
+
+  function drawHeader() {
+    drawTopBar();
+    y = margin;
+    if (logoData) {
+      try { pdf.addImage(logoData, "JPEG", margin, y, 46, 46); } catch (e) { /* ignore bad image */ }
+    }
+    const textX = margin + 56;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(13);
+    pdf.setTextColor(C.red);
+    pdf.text(settings.companyName || "", textX, y + 14);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    [settings.address, `Tél: ${settings.phone} · ${settings.email}`, `${settings.ninea} · ${settings.rccm}`]
+      .forEach((line, i) => pdf.text(line || "", textX, y + 27 + i * 10));
+
+    pdf.setFont("courier", "bold");
+    let numFontSize = 11;
+    pdf.setFontSize(numFontSize);
+    const numPadding = 24;
+    let boxW = pdf.getTextWidth(avoir.numero) + numPadding;
+    const maxBoxW = pageWidth - margin * 2;
+    while (boxW > maxBoxW && numFontSize > 7) { numFontSize -= 0.5; pdf.setFontSize(numFontSize); boxW = pdf.getTextWidth(avoir.numero) + numPadding; }
+    boxW = Math.max(boxW, 100);
+    const boxH = 20;
+    const boxX = pageWidth - margin - boxW;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text("AVOIR", boxX + boxW, y - 2, { align: "right" });
+    pdf.setFillColor(C.redSoft);
+    pdf.roundedRect(boxX, y + 2, boxW, boxH, 3, 3, "F");
+    pdf.setFont("courier", "bold");
+    pdf.setFontSize(numFontSize);
+    pdf.setTextColor(C.red);
+    pdf.text(avoir.numero, boxX + boxW / 2, y + 2 + boxH / 2 + 4, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text(`Émis le ${avoir.date}`, boxX + boxW, y + 2 + boxH + 12, { align: "right" });
+
+    y += 60;
+    pdf.setDrawColor(C.border);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 20;
+
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text("AVOIR ÉTABLI À", margin, y);
+    pdf.text("EN ANNULATION DE", pageWidth - margin, y, { align: "right" });
+    y += 12;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.setTextColor(C.red);
+    pdf.text(settings.clientName || "", margin, y);
+    pdf.setFont("courier", "bold");
+    pdf.setTextColor(C.navy);
+    pdf.text(avoir.originalInvoiceNumero, pageWidth - margin, y, { align: "right" });
+    y += 12;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(C.inkMuted);
+    pdf.text(settings.clientAddress || "", margin, y);
+    y += 18;
+  }
+
+  function drawTableHeader() {
+    pdf.setFillColor(C.red);
+    pdf.rect(margin, y, contentWidth, 18, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    pdf.setTextColor("#ffffff");
+    cols.forEach((c) => {
+      const tx = c.align === "right" ? c.x + c.w - 4 : c.x + 4;
+      pdf.text(c.label, tx, y + 12, { align: c.align === "right" ? "right" : "left" });
+    });
+    y += 18;
+  }
+
+  function fitTextToWidth(text, maxWidth) {
+    let s = String(text ?? "");
+    if (pdf.getTextWidth(s) <= maxWidth) return s;
+    while (s.length > 1 && pdf.getTextWidth(s + "…") > maxWidth) s = s.slice(0, -1);
+    return s + "…";
+  }
+
+  drawHeader();
+  drawTableHeader();
+
+  const rowH = 16;
+  avoir.lines.forEach((l, i) => {
+    if (y + rowH > pageHeight - 90) {
+      pdf.addPage();
+      y = margin;
+      drawTopBar();
+      y = margin;
+      drawTableHeader();
+    }
+    if (i % 2 === 1) {
+      pdf.setFillColor(C.steelSoft);
+      pdf.rect(margin, y, contentWidth, rowH, "F");
+    }
+    const vals = {
+      numeroConteneur: l.numeroConteneur || "—",
+      typeConteneur: l.typeConteneur || "",
+      destination: l.destination || "",
+      nature: natureLabel(l.nature),
+      reference: l.reference || "",
+      ht: `-${fmtPdfNumber(l.ht)}`,
+      tva: tvaNatures.includes(l.nature) ? `-${fmtPdfNumber(l.tva)}` : "Exon.",
+      gfc: l.gfc ? `-${fmtPdfNumber(l.gfc)}` : "—",
+      ttc: `-${fmtPdfNumber(l.ttc)}`,
+    };
+    cols.forEach((c) => {
+      if (c.key === "numeroConteneur") { pdf.setFont("courier", "bold"); pdf.setTextColor(C.ink); }
+      else if (c.key === "ttc") { pdf.setFont("helvetica", "bold"); pdf.setTextColor(C.red); }
+      else { pdf.setFont("helvetica", "normal"); pdf.setTextColor(C.ink); }
+      let size = 7.5;
+      pdf.setFontSize(size);
+      const maxW = c.w - 8;
+      while (pdf.getTextWidth(String(vals[c.key])) > maxW && size > 6) { size -= 0.5; pdf.setFontSize(size); }
+      const text = fitTextToWidth(vals[c.key], maxW);
+      const tx = c.align === "right" ? c.x + c.w - 4 : c.x + 4;
+      pdf.text(text, tx, y + 11, { align: c.align === "right" ? "right" : "left" });
+    });
+    y += rowH;
+  });
+
+  y += 14;
+  const totW = 200;
+  const totX = pageWidth - margin - totW;
+  const hasGfc = !!avoir.totals.gfc;
+  const totH = hasGfc ? 90 : 74;
+  if (y + totH + 20 > pageHeight - 60) { pdf.addPage(); drawTopBar(); y = margin; }
+  pdf.setFillColor(C.steelSoft);
+  pdf.roundedRect(totX, y, totW, totH, 4, 4, "F");
+  let ty = y + 16;
+  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9);
+  pdf.setTextColor(C.inkMuted); pdf.text("Total HT", totX + 10, ty);
+  pdf.setTextColor(C.ink); pdf.text(`-${fmtPdfNumber(avoir.totals.ht)}`, totX + totW - 10, ty, { align: "right" });
+  ty += 16;
+  pdf.setTextColor(C.inkMuted); pdf.text("Total TVA", totX + 10, ty);
+  pdf.setTextColor(C.ink); pdf.text(`-${fmtPdfNumber(avoir.totals.tva)}`, totX + totW - 10, ty, { align: "right" });
+  ty += 16;
+  if (hasGfc) {
+    pdf.setTextColor(C.inkMuted); pdf.text("Total GFC (hors TVA)", totX + 10, ty);
+    pdf.setTextColor(C.ink); pdf.text(`-${fmtPdfNumber(avoir.totals.gfc)}`, totX + totW - 10, ty, { align: "right" });
+    ty += 16;
+  }
+  pdf.setDrawColor(C.border);
+  pdf.line(totX + 10, ty, totX + totW - 10, ty);
+  ty += 18;
+  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10);
+  pdf.setTextColor(C.red);
+  pdf.text("Total Avoir TTC", totX + 10, ty);
+  const ttcText = `-${fmtPdfAmount(avoir.totals.ttc)}`;
+  let ttcFontSize = 10;
+  pdf.setFontSize(ttcFontSize);
+  const labelW = pdf.getTextWidth("Total Avoir TTC");
+  const availW = totW - 20 - labelW - 10;
+  let ttcBoxW = pdf.getTextWidth(ttcText) + 20;
+  while (ttcBoxW > availW && ttcFontSize > 7) { ttcFontSize -= 0.5; pdf.setFontSize(ttcFontSize); ttcBoxW = pdf.getTextWidth(ttcText) + 20; }
+  const ttcBoxH = 18;
+  pdf.setFillColor(C.red);
+  pdf.roundedRect(totX + totW - 10 - ttcBoxW, ty - 13, ttcBoxW, ttcBoxH, 3, 3, "F");
+  pdf.setTextColor("#ffffff");
+  pdf.setFontSize(ttcFontSize);
+  pdf.text(ttcText, totX + totW - 10 - ttcBoxW / 2, ty - 1, { align: "center" });
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(C.inkMuted);
+  pdf.setDrawColor(C.border);
+  const footerY = pageHeight - 50;
+  pdf.line(margin, footerY, pageWidth - margin, footerY);
+  const footerNote = `Cet avoir annule et remplace la facturation des lignes ci-dessus, initialement émises sur la facture ${avoir.originalInvoiceNumero}.`;
+  const footerLines = pdf.splitTextToSize(footerNote, contentWidth);
+  footerLines.forEach((line, i) => pdf.text(line, margin, footerY + 14 + i * 10));
+
+  return pdf.output("blob");
+}
+
 function getGoogleAccessToken() {
   return new Promise((resolve, reject) => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -1585,11 +1919,161 @@ function InvoiceModal({ invoice, settings, onExportExcel, onClose }) {
   );
 }
 
+/* ============================= AVOIR PREVIEW MODAL ============================= */
+function AvoirModal({ avoir, settings, onExportExcel, onClose }) {
+  const [busy, setBusy] = useState(null);
+  const [driveStatus, setDriveStatus] = useState(null);
+  const driveConfigured = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  const handleDownloadPdf = async () => {
+    setBusy("pdf");
+    try {
+      const blob = await buildAvoirPdfBlob(avoir, settings);
+      const url = URL.createObjectURL(blob);
+      triggerFileDownload(url, `${avoir.numero}.pdf`);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) {
+      alert("Erreur lors de la génération du PDF : " + e.message);
+    }
+    setBusy(null);
+  };
+
+  const handleSaveToDrive = async () => {
+    setBusy("drive");
+    setDriveStatus(null);
+    try {
+      const blob = await buildAvoirPdfBlob(avoir, settings);
+      await uploadBlobToDrive(blob, `${avoir.numero}.pdf`);
+      setDriveStatus("ok");
+    } catch (e) {
+      setDriveStatus("error");
+      console.error(e);
+    }
+    setBusy(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6" style={{ background: "rgba(11,31,58,0.6)" }} onClick={onClose}>
+      <div
+        className="w-full max-w-3xl rounded-xl overflow-hidden flex flex-col"
+        style={{ background: C.bg, maxHeight: "94vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderBottom: `1px solid ${C.border}` }}>
+          <div className="font-bold text-sm" style={{ color: C.red, fontFamily: "ui-monospace, monospace" }}>{avoir.numero}</div>
+          <button onClick={onClose} className="p-1.5 rounded hover:opacity-70" style={{ color: C.navy }}><X size={18} /></button>
+        </div>
+
+        <div className="overflow-y-auto p-3 sm:p-6 flex-1">
+          <AvoirDocument avoir={avoir} settings={settings} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 justify-end px-4 sm:px-5 py-3 shrink-0" style={{ background: "#fff", borderTop: `1px solid ${C.border}` }}>
+          {driveStatus === "ok" && <span className="text-xs flex items-center gap-1" style={{ color: C.green }}><CheckCircle2 size={14} /> Envoyée sur Drive</span>}
+          {driveStatus === "error" && <span className="text-xs" style={{ color: C.red }}>Échec de l'envoi vers Drive</span>}
+          <Btn kind="ghost" icon={Download} onClick={() => onExportExcel(avoir)}>Excel</Btn>
+          <button
+            title={driveConfigured ? "Enregistrer sur Google Drive" : "Google Drive non configuré — voir README"}
+            disabled={busy === "drive" || !driveConfigured}
+            onClick={handleSaveToDrive}
+            className={`inline-flex items-center justify-center rounded-md p-2.5 transition ${busy === "drive" || !driveConfigured ? "opacity-40 cursor-not-allowed" : "hover:opacity-85"}`}
+            style={{ background: "transparent", color: C.red, border: `1px solid ${C.border}` }}
+          >
+            <UploadCloud size={18} />
+          </button>
+          <button
+            title="Télécharger en PDF"
+            disabled={busy === "pdf"}
+            onClick={handleDownloadPdf}
+            className={`inline-flex items-center justify-center rounded-md p-2.5 transition ${busy === "pdf" ? "opacity-40 cursor-not-allowed" : "hover:opacity-85"}`}
+            style={{ background: C.red, color: "#fff" }}
+          >
+            <FileDown size={18} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================= CREATE AVOIR MODAL (choose which lines to credit) ============================= */
+function AvoirCreateModal({ invoice, onCreate, onClose }) {
+  const [checked, setChecked] = useState(() => Object.fromEntries(invoice.lines.map((_, i) => [i, true])));
+  const toggle = (i) => setChecked((c) => ({ ...c, [i]: !c[i] }));
+  const selectedIndexes = invoice.lines.map((_, i) => i).filter((i) => checked[i]);
+  const selectedTotals = selectedIndexes.reduce(
+    (acc, i) => {
+      const l = invoice.lines[i];
+      acc.ht += l.ht; acc.tva += l.tva; acc.gfc += l.gfc || 0; acc.ttc += l.ttc;
+      return acc;
+    },
+    { ht: 0, tva: 0, gfc: 0, ttc: 0 }
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6" style={{ background: "rgba(11,31,58,0.6)" }} onClick={onClose}>
+      <div
+        className="w-full max-w-2xl rounded-xl overflow-hidden flex flex-col"
+        style={{ background: "#fff", maxHeight: "90vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: `1px solid ${C.border}`, background: C.redSoft }}>
+          <div className="font-bold text-sm" style={{ color: C.red }}>Créer un avoir — {invoice.numero}</div>
+          <button onClick={onClose} className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}><X size={18} /></button>
+        </div>
+
+        <div className="overflow-y-auto p-5 flex-1 space-y-3">
+          <p className="text-sm" style={{ color: C.inkMuted }}>
+            Cochez les conteneurs à annuler (ex: un conteneur facturé mais non livré). Un avoir sera généré pour ces lignes, et les opérations correspondantes redeviendront disponibles pour une nouvelle facturation.
+          </p>
+          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: C.steelSoft }}>
+                  <th className="px-3 py-2"></th>
+                  <th className="text-left px-3 py-2 text-xs font-semibold uppercase" style={{ color: C.steel }}>Conteneur</th>
+                  <th className="text-left px-3 py-2 text-xs font-semibold uppercase" style={{ color: C.steel }}>Nature</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold uppercase" style={{ color: C.steel }}>TTC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.lines.map((l, i) => (
+                  <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="px-3 py-2"><input type="checkbox" checked={!!checked[i]} onChange={() => toggle(i)} /></td>
+                    <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{l.numeroConteneur}</td>
+                    <td className="px-3 py-2"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                    <td className="px-3 py-2 text-right font-semibold">{fmt(l.ttc)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="rounded-lg p-3 text-sm flex justify-between items-center" style={{ background: C.redSoft, color: C.red }}>
+            <span>{selectedIndexes.length} ligne(s) sélectionnée(s)</span>
+            <span className="font-bold">Total avoir : -{fmt(selectedTotals.ttc)}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-3 shrink-0" style={{ borderTop: `1px solid ${C.border}` }}>
+          <Btn kind="ghost" onClick={onClose}>Annuler</Btn>
+          <Btn
+            kind="danger" icon={Check} disabled={selectedIndexes.length === 0}
+            onClick={() => { onCreate(invoice.id, selectedIndexes); onClose(); }}
+          >
+            Confirmer l'avoir
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================= INVOICES TAB ============================= */
-function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
+function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid, onCreateAvoir }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
   const [selectedIds, setSelectedIds] = useState({});
+  const [avoirDraft, setAvoirDraft] = useState(null); // invoice being turned into an avoir
 
   const filtered = invoices.filter((inv) => {
     if (!q) return true;
@@ -1677,6 +2161,16 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
                     </button>
                     {isAdmin && (
                       <button
+                        title="Créer un avoir (admin)"
+                        onClick={() => setAvoirDraft(inv)}
+                        className="p-1.5 rounded hover:opacity-70"
+                        style={{ color: C.red }}
+                      >
+                        <FileMinus size={16} />
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
                         title="Supprimer la facture (admin)"
                         onClick={() => {
                           if (window.confirm(`Supprimer la facture ${inv.numero} ? Les opérations liées redeviendront non facturées.`)) onDelete(inv.id);
@@ -1715,6 +2209,82 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid }) {
       )}
 
       {active && <InvoiceModal invoice={active} settings={settings} onExportExcel={exportExcel} onClose={() => setActive(null)} />}
+      {avoirDraft && (
+        <AvoirCreateModal
+          invoice={avoirDraft}
+          onCreate={onCreateAvoir}
+          onClose={() => setAvoirDraft(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ============================= AVOIRS TAB ============================= */
+function AvoirsTab({ avoirs, settings }) {
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(null);
+
+  const filtered = avoirs.filter((av) => {
+    if (!q) return true;
+    const qq = q.toLowerCase();
+    return av.numero.toLowerCase().includes(qq) || av.originalInvoiceNumero.toLowerCase().includes(qq) || av.lines.some((l) => l.numeroConteneur.toLowerCase().includes(qq));
+  }).sort((a, b) => (b.numero > a.numero ? 1 : -1));
+
+  const exportExcel = async (av) => {
+    const XLSX = await import("xlsx");
+    const rows = av.lines.map((l) => ({
+      "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
+      "Nature": natureLabel(l.nature), "Référence": l.reference,
+      "Montant HT": -l.ht, "TVA": -l.tva, "GFC (hors TVA)": -(l.gfc || 0), "Montant TTC": -l.ttc,
+    }));
+    rows.push({});
+    rows.push({ "N° Conteneur": "TOTAL AVOIR", "Montant HT": -av.totals.ht, "TVA": -av.totals.tva, "GFC (hors TVA)": -(av.totals.gfc || 0), "Montant TTC": -av.totals.ttc });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Avoir");
+    XLSX.writeFile(wb, `${av.numero}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold" style={{ color: C.navy }}>Avoirs</h2>
+        <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Créés depuis une facture (onglet Factures) pour annuler la facturation d'un conteneur, par exemple non livré.</p>
+      </div>
+      <div className="flex items-center gap-2 rounded-md px-2.5 py-1.5" style={{ border: `1px solid ${C.border}`, background: C.card, maxWidth: 360 }}>
+        <Search size={14} style={{ color: C.inkMuted }} />
+        <input className="outline-none text-sm flex-1" placeholder="N° avoir, n° facture ou n° conteneur..." value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="rounded-lg overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ background: C.steelSoft }}>
+              {["N° Avoir", "Facture d'origine", "Date", "Lignes", "Total Avoir TTC", ""].map((h) => (
+                <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucun avoir.</td></tr>}
+            {filtered.map((av) => (
+              <tr key={av.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                <td className="px-3 py-2 font-semibold" style={{ fontFamily: "ui-monospace, monospace", color: C.red }}>{av.numero}</td>
+                <td className="px-3 py-2" style={{ fontFamily: "ui-monospace, monospace" }}>{av.originalInvoiceNumero}</td>
+                <td className="px-3 py-2">{av.date}</td>
+                <td className="px-3 py-2">{av.lines.length}</td>
+                <td className="px-3 py-2 font-semibold" style={{ color: C.red }}>-{fmt(av.totals.ttc)}</td>
+                <td className="px-3 py-2">
+                  <button title="Aperçu" onClick={() => setActive(av)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}>
+                    <Eye size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {active && <AvoirModal avoir={active} settings={settings} onExportExcel={exportExcel} onClose={() => setActive(null)} />}
     </div>
   );
 }
@@ -1755,10 +2325,18 @@ function SettingsTab({ settings, onSave, isAdmin }) {
       </div>
 
       <div className="rounded-lg p-4 space-y-3" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-        <div className="font-semibold text-sm" style={{ color: C.navy }}>Numérotation</div>
+        <div className="font-semibold text-sm" style={{ color: C.navy }}>Numérotation — Factures</div>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}>
           <Field label="Préfixe"><input className={inputCls} style={inputStyle} value={form.invoicePrefix} onChange={(e) => set("invoicePrefix", e.target.value)} /></Field>
           <Field label="Prochain numéro"><input type="number" min="1" className={inputCls} style={inputStyle} value={form.nextInvoiceNumber} onChange={(e) => set("nextInvoiceNumber", Number(e.target.value))} /></Field>
+        </div>
+      </div>
+
+      <div className="rounded-lg p-4 space-y-3" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+        <div className="font-semibold text-sm" style={{ color: C.navy }}>Numérotation — Avoirs</div>
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}>
+          <Field label="Préfixe"><input className={inputCls} style={inputStyle} value={form.avoirPrefix} onChange={(e) => set("avoirPrefix", e.target.value)} /></Field>
+          <Field label="Prochain numéro"><input type="number" min="1" className={inputCls} style={inputStyle} value={form.nextAvoirNumber} onChange={(e) => set("nextAvoirNumber", Number(e.target.value))} /></Field>
         </div>
       </div>
 
@@ -1818,6 +2396,7 @@ export default function App() {
   const [tariffs, setTariffs] = useState([]);
   const [trucks, setTrucks] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [avoirs, setAvoirs] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -1846,12 +2425,13 @@ export default function App() {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [rawOps, tar, rawInv, set, trk] = await Promise.all([
+      const [rawOps, tar, rawInv, set, trk, av] = await Promise.all([
         loadKey("ceva-operations", []),
         loadKey("ceva-sympos-tariffs", []),
         loadKey("ceva-invoices", []),
         loadKey("ceva-settings", defaultSettings),
         loadKey("ceva-trucks", []),
+        loadKey("ceva-avoirs", []),
       ]);
 
       // Migration: older data used "Ordre de transport", then "OT" — now "ODM".
@@ -1883,7 +2463,7 @@ export default function App() {
       if (invChanged) saveKey("ceva-invoices", inv);
 
       if (cancelled) return;
-      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set); setTrucks(trk);
+      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set); setTrucks(trk); setAvoirs(av);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -1976,11 +2556,45 @@ export default function App() {
     notify(`Facture ${inv.numero} marquée comme payée`);
   };
 
+  // Credit note (avoir): cancels billing for selected lines of an existing invoice
+  // (e.g. a container that was invoiced but never actually delivered). It keeps a
+  // proper paper trail (unlike deleting the invoice) and frees the underlying
+  // operations so they can be re-invoiced later once actually completed.
+  const createAvoir = async (invoiceId, lineIndexes) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return;
+    const creditedLines = lineIndexes.map((i) => inv.lines[i]).filter(Boolean);
+    if (creditedLines.length === 0) return;
+    const totals = creditedLines.reduce(
+      (acc, l) => { acc.ht += l.ht; acc.tva += l.tva; acc.gfc += l.gfc || 0; acc.ttc += l.ttc; return acc; },
+      { ht: 0, tva: 0, gfc: 0, ttc: 0 }
+    );
+    const year = new Date().getFullYear();
+    const numero = `${settings.avoirPrefix}-${year}-${String(settings.nextAvoirNumber).padStart(4, "0")}`;
+    const avoir = {
+      id: uid(), numero, date: todayISO(),
+      originalInvoiceId: inv.id, originalInvoiceNumero: inv.numero,
+      clientName: settings.clientName, lines: creditedLines, totals, createdAt: Date.now(),
+    };
+    const nextAvoirs = [...avoirs, avoir];
+    const opIds = creditedLines.map((l) => l.opId);
+    const nextOps = operations.map((o) => (opIds.includes(o.id) ? { ...o, facturee: false, factureId: null, factureNumero: null } : o));
+    const nextSettings = { ...settings, nextAvoirNumber: settings.nextAvoirNumber + 1 };
+    setAvoirs(nextAvoirs); setOperations(nextOps); setSettings(nextSettings);
+    await Promise.all([
+      saveKey("ceva-avoirs", nextAvoirs),
+      saveKey("ceva-operations", nextOps),
+      saveKey("ceva-settings", nextSettings),
+    ]);
+    notify(`Avoir ${numero} créé sur ${inv.numero}`);
+  };
+
   const tabs = [
     { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { key: "operations", label: "Opérations", icon: ClipboardList },
     { key: "newinvoice", label: "Nouvelle facture", icon: Receipt },
     { key: "invoices", label: "Factures", icon: FileText },
+    { key: "avoirs", label: "Avoirs", icon: FileMinus },
     { key: "tariffs", label: "Tarifs Sympos", icon: MapPin },
     { key: "trucks", label: "Camions", icon: Truck },
     { key: "settings", label: "Paramètres", icon: Settings },
@@ -2075,7 +2689,8 @@ export default function App() {
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} invoices={invoices} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
-        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} />}
+        {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} onCreateAvoir={createAvoir} />}
+        {tab === "avoirs" && <AvoirsTab avoirs={avoirs} settings={settings} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
         {tab === "trucks" && <TrucksTab trucks={trucks} onAdd={addTruck} onUpdate={updateTruck} onDelete={deleteTruck} isAdmin={isAdmin} />}
         {tab === "settings" && <SettingsTab settings={settings} onSave={saveSettings} isAdmin={isAdmin} />}
