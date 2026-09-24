@@ -245,7 +245,7 @@ function clearOperationDraft() {
   try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
 }
 
-function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
+function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave }) {
   // Only new-entry forms (not edits of an existing operation) keep a draft —
   // this is what survives an accidental tab switch / brief disconnect so
   // nothing typed is ever lost.
@@ -267,11 +267,17 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const fields = NATURE_FIELDS[nature];
+  const isDuplicateContainer = useMemo(() => {
+    const num = (form.numeroConteneur || "").trim().toUpperCase();
+    if (num.length !== 11) return false;
+    return (operations || []).some((o) => o.id !== initial?.id && (o.numeroConteneur || "").trim().toUpperCase() === num);
+  }, [form.numeroConteneur, operations, initial]);
+
   const requiredOk = fields.every((f) => {
     if (f === "tarifManuel") return String(form.tarifManuel || "").trim() !== "";
     if (f === "numeroConteneur") return (form.numeroConteneur || "").length === 11;
     return String(form[f] || "").trim() !== "";
-  });
+  }) && !isDuplicateContainer;
 
   const renderField = (key) => {
     const label = FIELD_LABELS[key];
@@ -295,14 +301,20 @@ function OperationForm({ initial, tariffs, trucks, onCancel, onSave }) {
       return (
         <Field label={label} required key={key}>
           <input
-            className={inputCls} style={{ ...inputStyle, fontFamily: "ui-monospace, monospace", letterSpacing: "0.05em" }}
+            className={inputCls} style={{ ...inputStyle, fontFamily: "ui-monospace, monospace", letterSpacing: "0.05em", ...(isDuplicateContainer ? { borderColor: C.red } : {}) }}
             value={form.numeroConteneur} maxLength={11}
             onChange={(e) => set("numeroConteneur", formatContainerNumber(e.target.value))}
             placeholder="ex: CEVU1234567"
           />
-          <span className="text-xs" style={{ color: len === 11 ? C.green : C.inkMuted }}>
-            {len}/11 — 4 lettres puis 7 chiffres
-          </span>
+          {isDuplicateContainer ? (
+            <span className="text-xs font-semibold" style={{ color: C.red }}>
+              Ce numéro de conteneur est déjà enregistré — opération refusée pour éviter un doublon.
+            </span>
+          ) : (
+            <span className="text-xs" style={{ color: len === 11 ? C.green : C.inkMuted }}>
+              {len}/11 — 4 lettres puis 7 chiffres
+            </span>
+          )}
         </Field>
       );
     }
@@ -660,6 +672,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
         <OperationForm
           tariffs={tariffs}
           trucks={trucks}
+          operations={operations}
           onCancel={() => setShowForm(false)}
           onSave={(op) => { onAdd(op); setShowForm(false); }}
         />
@@ -669,6 +682,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
           initial={editing}
           tariffs={tariffs}
           trucks={trucks}
+          operations={operations}
           onCancel={() => setEditing(null)}
           onSave={(op) => { onUpdate(op); setEditing(null); }}
         />
