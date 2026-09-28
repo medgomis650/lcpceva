@@ -39,11 +39,13 @@ const NATURES = [
   { key: "export", label: "Export" },
   { key: "transfert", label: "Transfert" },
   { key: "mise_a_terre", label: "Mise à terre" },
+  { key: "immobilisation", label: "Immobilisation" },
 ];
 const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
 const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20% remise
-const tvaNatures = ["import", "export"]; // both import and export are subject to the 18% TVA
+const tvaNatures = ["import", "export", "immobilisation"]; // subject to the 18% TVA
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
+const IMMOBILISATION_AMOUNT = 80000; // tarif fixe HT, seul cas où un conteneur déjà facturé peut l'être à nouveau
 const isGfcEligible = (op) => (op.lieuPriseEnCharge || "").trim().toUpperCase() === "DPW";
 
 const FIELD_LABELS = {
@@ -65,6 +67,7 @@ const NATURE_FIELDS = {
   export: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   transfert: ["date", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "pleinVide", "tarifManuel"],
   mise_a_terre: ["date", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
+  immobilisation: ["date", "numeroConteneur", "typeConteneur", "client"],
 };
 
 const CONTAINER_TYPES = ["20 DV", "40 DV", "40 HC", "20 RE", "40 RE", "20 OT", "40 OT", "20 FR", "40 FR"];
@@ -131,7 +134,7 @@ function computeDurationDays(start, end) {
   return diff;
 }
 
-const natureColors = { import: "#3B5578", export: "#0B1F3A", transfert: "#D9622B", mise_a_terre: "#2F7A52" };
+const natureColors = { import: "#3B5578", export: "#0B1F3A", transfert: "#D9622B", mise_a_terre: "#2F7A52", immobilisation: "#7C5CBF" };
 function monthKey(dateStr) {
   return dateStr ? dateStr.slice(0, 7) : null; // "YYYY-MM"
 }
@@ -165,7 +168,8 @@ function computeLine(op, tarifBase) {
     return { tarifSympos: base, remise, ht: netHT, tva, ttc: netHT + tva };
   }
   const montant = Number(tarifBase) || 0;
-  return { tarifSympos: null, remise: 0, ht: montant, tva: 0, ttc: montant };
+  const tva = tvaNatures.includes(op.nature) ? montant * 0.18 : 0;
+  return { tarifSympos: null, remise: 0, ht: montant, tva, ttc: montant + tva };
 }
 
 /* ============================= SMALL UI ATOMS ============================= */
@@ -268,10 +272,11 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
 
   const fields = NATURE_FIELDS[nature];
   const isDuplicateContainer = useMemo(() => {
+    if (nature === "immobilisation") return false; // seul cas où un conteneur déjà facturé peut être ressaisi
     const num = (form.numeroConteneur || "").trim().toUpperCase();
     if (num.length !== 11) return false;
     return (operations || []).some((o) => o.id !== initial?.id && (o.numeroConteneur || "").trim().toUpperCase() === num);
-  }, [form.numeroConteneur, operations, initial]);
+  }, [form.numeroConteneur, operations, initial, nature]);
 
   const requiredOk = fields.every((f) => {
     if (f === "tarifManuel") return String(form.tarifManuel || "").trim() !== "";
@@ -974,6 +979,8 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
     if (sympNatures.includes(op.nature)) {
       const found = lookupSympos(tariffs, op.localiteTarifaire, op.typeConteneur);
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : found;
+    } else if (op.nature === "immobilisation") {
+      base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : IMMOBILISATION_AMOUNT;
     } else {
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : op.tarifManuel;
     }
