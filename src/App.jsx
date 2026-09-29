@@ -60,6 +60,7 @@ const FIELD_LABELS = {
   localiteTarifaire: "Localité (tarif Sympos)",
   pleinVide: "Plein / Vide",
   tarifManuel: "Tarif (FCFA, hors Sympos)",
+  nombreJours: "Nombre de jours d'immobilisation",
 };
 
 const NATURE_FIELDS = {
@@ -67,7 +68,7 @@ const NATURE_FIELDS = {
   export: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   transfert: ["date", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "pleinVide", "tarifManuel"],
   mise_a_terre: ["date", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
-  immobilisation: ["date", "numeroConteneur", "typeConteneur", "client"],
+  immobilisation: ["date", "numeroConteneur", "typeConteneur", "client", "nombreJours"],
 };
 
 const CONTAINER_TYPES = ["20 DV", "40 DV", "40 HC", "20 RE", "40 RE", "20 OT", "40 OT", "20 FR", "40 FR"];
@@ -104,6 +105,7 @@ const blankOp = (nature) => ({
   pleinVide: "Plein",
   tarifManuel: "",
   dateFin: "",
+  nombreJours: 1,
 });
 
 const defaultSettings = {
@@ -281,6 +283,7 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
   const requiredOk = fields.every((f) => {
     if (f === "tarifManuel") return String(form.tarifManuel || "").trim() !== "";
     if (f === "numeroConteneur") return (form.numeroConteneur || "").length === 11;
+    if (f === "nombreJours") return Number(form.nombreJours) >= 1;
     return String(form[f] || "").trim() !== "";
   }) && !isDuplicateContainer;
 
@@ -357,6 +360,20 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
       return (
         <Field label={label} required key={key}>
           <input type="number" min="0" className={inputCls} style={inputStyle} value={form.tarifManuel} onChange={(e) => set("tarifManuel", e.target.value)} placeholder="0" />
+        </Field>
+      );
+    }
+    if (key === "nombreJours") {
+      const jours = Number(form.nombreJours) || 0;
+      return (
+        <Field label={label} required key={key}>
+          <input
+            type="number" min="1" step="1" className={inputCls} style={inputStyle}
+            value={form.nombreJours} onChange={(e) => set("nombreJours", e.target.value)}
+          />
+          <span className="text-xs" style={{ color: C.inkMuted }}>
+            {jours > 0 ? `${jours} × 80 000 = ${fmtPlain(jours * IMMOBILISATION_AMOUNT)} FCFA HT` : "Tarif : 80 000 FCFA HT par jour"}
+          </span>
         </Field>
       );
     }
@@ -652,6 +669,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
         "Lieu de prise en charge": o.lieuPriseEnCharge || "",
         "Destination": o.destination || "",
         "ODM": o.odm || "",
+        "Nombre de jours (immobilisation)": o.nature === "immobilisation" ? (o.nombreJours || 1) : "",
         "Statut facturation": statut,
         "Montant HT": montant !== null ? montant : "",
         "Date fin": o.dateFin || "",
@@ -742,7 +760,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                       <td className="px-3 py-2 whitespace-nowrap">{o.numeroCamion || "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{(o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{o.client || "—"}</td>
-                      <td className="px-3 py-2">{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</td>
+                      <td className="px-3 py-2">{o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : <>{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</>}</td>
                       <td className="px-3 py-2"><EndDateCell op={o} onSet={onSetEndDate} /></td>
                       <td className="px-3 py-2">
                         {!o.facturee ? (
@@ -980,7 +998,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
       const found = lookupSympos(tariffs, op.localiteTarifaire, op.typeConteneur);
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : found;
     } else if (op.nature === "immobilisation") {
-      base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : IMMOBILISATION_AMOUNT;
+      base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : IMMOBILISATION_AMOUNT * (Number(op.nombreJours) || 1);
     } else {
       base = manualTarif[op.id] !== undefined ? manualTarif[op.id] : op.tarifManuel;
     }
@@ -1047,7 +1065,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
               {list.map((o) => {
                 const l = lineFor(o);
                 const terminee = !!o.dateFin;
-                const ref = o.odm ? `ODM: ${o.odm}` : "—";
+                const ref = o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : o.odm ? `ODM: ${o.odm}` : "—";
                 return (
                   <tr key={o.id} style={{ borderTop: `1px solid ${C.border}`, background: selected[o.id] ? C.orangeSoft : "transparent", opacity: terminee ? 1 : 0.55 }}>
                     <td className="px-3 py-2">
@@ -1117,7 +1135,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
               onClick={() => {
                 const lines = selectedOps.map((o) => {
                   const l = lineFor(o);
-                  const ref = o.odm ? `ODM: ${o.odm}` : "—";
+                  const ref = o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : o.odm ? `ODM: ${o.odm}` : "—";
                   return {
                     opId: o.id, numeroConteneur: o.numeroConteneur, typeConteneur: o.typeConteneur,
                     destination: o.destination || "—", nature: o.nature, reference: ref,
