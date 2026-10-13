@@ -2586,11 +2586,13 @@ export default function App() {
 
   const createInvoice = async ({ lines, totals, opIds }) => {
     const year = new Date().getFullYear();
-    const numero = `${settings.invoicePrefix}-${year}-${String(settings.nextInvoiceNumber).padStart(4, "0")}`;
+    const maxExisting = invoices.reduce((m, i) => { const n = parseInt(String(i.numero).split("-").pop(), 10); return Number.isFinite(n) && n > m ? n : m; }, 0);
+    const seq = Math.max(settings.nextInvoiceNumber, maxExisting + 1);
+    const numero = `${settings.invoicePrefix}-${year}-${String(seq).padStart(4, "0")}`;
     const invoice = { id: uid(), numero, date: todayISO(), clientName: settings.clientName, lines, totals, paid: false, createdAt: Date.now() };
     const nextInvoices = [...invoices, invoice];
     const nextOps = operations.map((o) => opIds.includes(o.id) ? { ...o, facturee: true, factureId: invoice.id, factureNumero: numero } : o);
-    const nextSettings = { ...settings, nextInvoiceNumber: settings.nextInvoiceNumber + 1 };
+    const nextSettings = { ...settings, nextInvoiceNumber: seq + 1 };
     setInvoices(nextInvoices); setOperations(nextOps); setSettings(nextSettings);
     const results = await Promise.all([
       saveKey("ceva-invoices", nextInvoices),
@@ -2615,6 +2617,17 @@ export default function App() {
       saveKey("ceva-invoices", nextInvoices),
     ]);
     notify(`Facture ${inv.numero} supprimée`);
+  };
+
+  // Operations flagged as invoiced whose invoice no longer exists (e.g. an invoice that
+  // failed to save). Admin can release them so they can be invoiced again.
+  const orphanOps = invoices.length > 0 ? operations.filter((o) => o.facturee && !invoices.some((i) => i.id === o.factureId)) : [];
+  const releaseOrphans = async () => {
+    const ids = orphanOps.map((o) => o.id);
+    const nextOps = operations.map((o) => (ids.includes(o.id) ? { ...o, facturee: false, factureId: null, factureNumero: null } : o));
+    setOperations(nextOps);
+    await saveKey("ceva-operations", nextOps);
+    notify(`${ids.length} opération(s) libérée(s)`);
   };
 
   const markInvoicePaid = async (invoiceId) => {
@@ -2768,6 +2781,12 @@ export default function App() {
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} invoices={invoices} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
+        {tab === "invoices" && isAdmin && orphanOps.length > 0 && (
+          <div className="mb-3 p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm flex items-center justify-between gap-3 flex-wrap">
+            <span>{orphanOps.length} opération(s) sont marquées « facturées » ({[...new Set(orphanOps.map((o) => o.factureNumero))].join(", ")}) mais leur facture n'existe plus.</span>
+            <button onClick={releaseOrphans} className="px-3 py-1.5 rounded-md bg-amber-600 text-white">Libérer pour refacturer</button>
+          </div>
+        )}
         {tab === "invoices" && <InvoicesTab invoices={invoices} settings={settings} isAdmin={isAdmin} onDelete={deleteInvoice} onMarkPaid={markInvoicePaid} onCreateAvoir={createAvoir} />}
         {tab === "avoirs" && <AvoirsTab avoirs={avoirs} settings={settings} isAdmin={isAdmin} onDelete={deleteAvoir} />}
         {tab === "tariffs" && <TariffsTab tariffs={tariffs} onAdd={addTariff} onDelete={deleteTariff} isAdmin={isAdmin} />}
