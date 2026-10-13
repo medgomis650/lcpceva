@@ -2488,8 +2488,9 @@ export default function App() {
   // Wait until the session is confirmed before querying: fetching earlier can race the
   // auth token being attached to Supabase requests, get blocked by the security rules
   // (not-yet-authenticated), and silently leave the app showing empty data.
+  const userId = session?.user?.id;
   useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     let cancelled = false;
     setLoading(true);
     (async () => {
@@ -2535,7 +2536,7 @@ export default function App() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [session]);
+  }, [userId]); // keyed on the user id: token refreshes must NOT reload and overwrite local state
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -2591,11 +2592,12 @@ export default function App() {
     const nextOps = operations.map((o) => opIds.includes(o.id) ? { ...o, facturee: true, factureId: invoice.id, factureNumero: numero } : o);
     const nextSettings = { ...settings, nextInvoiceNumber: settings.nextInvoiceNumber + 1 };
     setInvoices(nextInvoices); setOperations(nextOps); setSettings(nextSettings);
-    await Promise.all([
+    const results = await Promise.all([
       saveKey("ceva-invoices", nextInvoices),
       saveKey("ceva-operations", nextOps),
       saveKey("ceva-settings", nextSettings),
     ]);
+    if (results.some((r) => !r)) { notify("⚠ Facture NON enregistrée en ligne : reconnectez-vous et réessayez"); setTab("invoices"); return; }
     notify(`Facture ${numero} créée`);
     setTab("invoices");
   };
