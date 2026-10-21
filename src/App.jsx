@@ -117,7 +117,7 @@ const defaultSettings = {
   rccm: "RCCM SN-DKR-XXXX-XXX",
   clientName: "CEVA GROUND AND RAIL",
   clientAddress: "Dakar, Sénégal",
-  footer: "Merci de votre confiance. Paiement à réception de facture. Toute réclamation doit être formulée dans les 8 jours suivant la réception de la facture.",
+  footer: "Merci de votre confiance. Paiement à 15 jours après réception de la facture. Toute réclamation doit être formulée dans les 8 jours suivant la réception de la facture.",
   invoicePrefix: "FAC",
   nextInvoiceNumber: 1,
   avoirPrefix: "AV",
@@ -682,6 +682,43 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
     XLSX.writeFile(wb, `${filename}.xlsx`);
   };
 
+  const renderStatus = (o) => (
+    <>
+{!o.facturee ? (
+                          <Badge tone="amber">Non facturée</Badge>
+                        ) : isOpPaid(o) ? (
+                          <Badge tone="green"><BadgeCheck size={12} /> Payée ({o.factureNumero})</Badge>
+                        ) : (
+                          <Badge tone="steel">{o.factureNumero}</Badge>
+                        )}
+    </>
+  );
+  const renderActions = (o) => (
+<div className="flex gap-1 justify-end">
+                          {!o.facturee ? (
+                            <>
+                              <button title="Modifier" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.steel }}><Pencil size={14} /></button>
+                              <button
+                                title="Supprimer"
+                                onClick={() => { if (window.confirm(`Supprimer l'opération ${o.numeroConteneur} ?`)) onDelete(o.id); }}
+                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
+                              ><Trash2 size={14} /></button>
+                            </>
+                          ) : isAdmin ? (
+                            <>
+                              <button title="Modifier (admin — facture déjà émise)" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.amber }}><Pencil size={14} /></button>
+                              <button
+                                title="Supprimer (admin — facture déjà émise)"
+                                onClick={() => { if (window.confirm(`Cette opération est déjà facturée (${o.factureNumero}). La supprimer quand même ?`)) onDelete(o.id); }}
+                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
+                              ><Trash2 size={14} /></button>
+                            </>
+                          ) : (
+                            <span title="Verrouillée (déjà facturée)" style={{ color: C.inkMuted }}><Lock size={14} /></span>
+                          )}
+                        </div>
+  );
+
   return (
     <div className="space-y-4">
       {!showForm && !editing && (
@@ -738,12 +775,12 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
           </div>
 
           <div className="rounded-lg overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="hidden md:block">
+              <table className="w-full text-xs" style={{ tableLayout: "auto" }}>
                 <thead>
                   <tr style={{ background: C.steelSoft }}>
                     {["Date", "Nature", "Conteneur", "Type", "N° camion", "Chauffeur", "Client", "Lieu / Destination", "Date fin / Durée", "Statut", ""].map((h) => (
-                      <th key={h} className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: C.steel }}>{h}</th>
+                      <th key={h} className="text-left px-1.5 py-2 font-semibold uppercase" style={{ color: C.steel, fontSize: 10 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -753,53 +790,50 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                   )}
                   {filtered.map((o) => (
                     <tr key={o.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                      <td className="px-3 py-2 whitespace-nowrap">{o.date}</td>
-                      <td className="px-3 py-2"><Badge tone="steel">{natureLabel(o.nature)}</Badge></td>
-                      <td className="px-3 py-2"><ContainerTag value={o.numeroConteneur} /></td>
-                      <td className="px-3 py-2 whitespace-nowrap">{o.typeConteneur}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{o.numeroCamion || "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{(o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{o.client || "—"}</td>
-                      <td className="px-3 py-2">{o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : <>{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</>}</td>
-                      <td className="px-3 py-2"><EndDateCell op={o} onSet={onSetEndDate} /></td>
-                      <td className="px-3 py-2">
-                        {!o.facturee ? (
-                          <Badge tone="amber">Non facturée</Badge>
-                        ) : isOpPaid(o) ? (
-                          <Badge tone="green"><BadgeCheck size={12} /> Payée ({o.factureNumero})</Badge>
-                        ) : (
-                          <Badge tone="steel">{o.factureNumero}</Badge>
-                        )}
+                      <td className="px-1.5 py-2 whitespace-nowrap">{o.date}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap"><Badge tone="steel">{natureLabel(o.nature)}</Badge></td>
+                      <td className="px-1.5 py-2 whitespace-nowrap"><ContainerTag value={o.numeroConteneur} /></td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{o.typeConteneur}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{o.numeroCamion || "—"}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{(o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "—"}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{o.client || "—"}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">{o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : <>{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</>}</td>
+                      <td className="px-1.5 py-2 whitespace-nowrap"><EndDateCell op={o} onSet={onSetEndDate} /></td>
+                      <td className="px-1.5 py-2 whitespace-nowrap">
+                        {renderStatus(o)}
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1 justify-end">
-                          {!o.facturee ? (
-                            <>
-                              <button title="Modifier" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.steel }}><Pencil size={14} /></button>
-                              <button
-                                title="Supprimer"
-                                onClick={() => { if (window.confirm(`Supprimer l'opération ${o.numeroConteneur} ?`)) onDelete(o.id); }}
-                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
-                              ><Trash2 size={14} /></button>
-                            </>
-                          ) : isAdmin ? (
-                            <>
-                              <button title="Modifier (admin — facture déjà émise)" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.amber }}><Pencil size={14} /></button>
-                              <button
-                                title="Supprimer (admin — facture déjà émise)"
-                                onClick={() => { if (window.confirm(`Cette opération est déjà facturée (${o.factureNumero}). La supprimer quand même ?`)) onDelete(o.id); }}
-                                className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
-                              ><Trash2 size={14} /></button>
-                            </>
-                          ) : (
-                            <span title="Verrouillée (déjà facturée)" style={{ color: C.inkMuted }}><Lock size={14} /></span>
-                          )}
-                        </div>
+                      <td className="px-1.5 py-2 whitespace-nowrap">
+                        {renderActions(o)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="md:hidden">
+              {filtered.length === 0 && <div className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</div>}
+              {filtered.map((o) => (
+                <div key={o.id} className="p-3 space-y-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <ContainerTag value={o.numeroConteneur} />
+                    <div className="flex items-center gap-2"><Badge tone="steel">{natureLabel(o.nature)}</Badge>{renderActions(o)}</div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span>{o.date} · {o.typeConteneur}</span>
+                    <span>{renderStatus(o)}</span>
+                  </div>
+                  <div className="text-sm" style={{ color: C.inkMuted }}>
+                    {o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : <>{o.lieuPriseEnCharge}{o.destination ? ` → ${o.destination}` : ""}</>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                    <div><span style={{ color: C.inkMuted }}>Client : </span>{o.client || "—"}</div>
+                    <div><span style={{ color: C.inkMuted }}>Camion : </span>{o.numeroCamion || "—"}</div>
+                    <div className="col-span-2"><span style={{ color: C.inkMuted }}>Chauffeur : </span>{(o.numeroCamion && chauffeurByNumero[o.numeroCamion]) || "—"}</div>
+                  </div>
+                  <div className="text-sm flex items-center gap-2"><span style={{ color: C.inkMuted }}>Fin :</span><EndDateCell op={o} onSet={onSetEndDate} /></div>
+                </div>
+              ))}
             </div>
           </div>
         </>
@@ -2531,8 +2565,11 @@ export default function App() {
       if (opsChanged) saveKey("ceva-operations", ops);
       if (invChanged) saveKey("ceva-invoices", inv);
 
+      // Migration: update the stored footer wording (payment within 15 days).
+      let set2 = set;
+      if (set.footer === "Merci de votre confiance. Paiement à réception de facture. Toute réclamation doit être formulée dans les 8 jours suivant la réception de la facture.") { set2 = { ...set, footer: "Merci de votre confiance. Paiement à 15 jours après réception de la facture. Toute réclamation doit être formulée dans les 8 jours suivant la réception de la facture." }; saveKey("ceva-settings", set2); }
       if (cancelled) return;
-      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set); setTrucks(trk); setAvoirs(av);
+      setOperations(ops); setTariffs(tar); setInvoices(inv); setSettings(set2); setTrucks(trk); setAvoirs(av);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -2719,7 +2756,7 @@ export default function App() {
   return (
     <div className="min-h-screen" style={{ background: C.bg, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
       <div className="no-print" style={{ background: C.navy }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+        <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Truck size={20} style={{ color: C.orange }} className="shrink-0" />
             <div className="min-w-0">
@@ -2777,7 +2814,7 @@ export default function App() {
         )}
       </div>
 
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === "dashboard" && <DashboardTab operations={operations} invoices={invoices} />}
         {tab === "operations" && <OperationsTab operations={operations} tariffs={tariffs} trucks={trucks} invoices={invoices} onAdd={addOperation} onUpdate={updateOperation} onDelete={deleteOperation} onSetEndDate={setEndDate} isAdmin={isAdmin} />}
         {tab === "newinvoice" && <NewInvoiceTab operations={operations} tariffs={tariffs} settings={settings} onCreate={createInvoice} isAdmin={isAdmin} />}
