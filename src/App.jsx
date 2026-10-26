@@ -50,7 +50,8 @@ const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20
 const tvaNatures = ["import", "export", "immobilisation"]; // subject to the 18% TVA
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
 const IMMOBILISATION_AMOUNT = 80000; // tarif fixe HT, seul cas où un conteneur déjà facturé peut l'être à nouveau
-const isGfcEligible = (op) => (op.lieuPriseEnCharge || "").trim().toUpperCase() === "DPW";
+// GFC: DPW pickups, and always available for mise à terre / récupération whatever the pickup place.
+const isGfcEligible = (op) => op.nature === "mise_a_terre" || (op.lieuPriseEnCharge || "").trim().toUpperCase() === "DPW";
 
 const FIELD_LABELS = {
   date: "Date",
@@ -1145,7 +1146,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
                     </td>
                     <td className="px-3 py-2">
                       {selected[o.id] && isGfcEligible(o) ? (
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Frais GFC 1 500 FCFA, hors TVA, optionnel (uniquement pour un lieu de prise en charge DPW)">
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Frais GFC 1 500 FCFA, hors TVA, optionnel (lieu de prise en charge DPW, ou mise à terre / récupération)">
                           <input type="checkbox" checked={!!gfcSelected[o.id]} onChange={() => toggleGfc(o.id)} />
                           1 500
                         </label>
