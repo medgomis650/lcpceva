@@ -42,6 +42,10 @@ const NATURES = [
   { key: "immobilisation", label: "Immobilisation" },
 ];
 const natureLabel = (k) => NATURES.find((n) => n.key === k)?.label || k;
+// "Mise à terre" covers two sub-types (same invoice nature, same pricing rules): a real
+// mise à terre, or a "récupération" (picking a container back up). Works on operations and invoice lines.
+const SOUS_TYPES = [{ key: "mise_a_terre", label: "Mise à terre" }, { key: "recuperation", label: "Récupération" }];
+const opNatureLabel = (o) => (o.nature === "mise_a_terre" && o.sousType === "recuperation" ? "Récupération" : natureLabel(o.nature));
 const sympNatures = ["import", "export"]; // both look up the Sympos tariff + 20% remise
 const tvaNatures = ["import", "export", "immobilisation"]; // subject to the 18% TVA
 const GFC_AMOUNT = 1500; // frais GFC fixes par conteneur, hors TVA, optionnel
@@ -59,6 +63,7 @@ const FIELD_LABELS = {
   client: "Client (donneur d'ordre)",
   localiteTarifaire: "Localité (tarif Sympos)",
   pleinVide: "Plein / Vide",
+  sousType: "Type d'opération",
   tarifManuel: "Tarif (FCFA, hors Sympos)",
   nombreJours: "Nombre de jours d'immobilisation",
 };
@@ -67,7 +72,7 @@ const NATURE_FIELDS = {
   import: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   export: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   transfert: ["date", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "pleinVide", "tarifManuel"],
-  mise_a_terre: ["date", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
+  mise_a_terre: ["sousType", "date", "odm", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
   immobilisation: ["date", "numeroConteneur", "typeConteneur", "client", "nombreJours"],
 };
 
@@ -95,6 +100,7 @@ const blankOp = (nature) => ({
   nature,
   date: new Date().toISOString().slice(0, 10),
   odm: "",
+  sousType: "mise_a_terre",
   typeConteneur: "",
   numeroConteneur: "",
   numeroCamion: "",
@@ -281,6 +287,7 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
   }, [form.numeroConteneur, operations, initial, nature]);
 
   const requiredOk = fields.every((f) => {
+    if (f === "sousType") return true;
     if (f === "tarifManuel") return String(form.tarifManuel || "").trim() !== "";
     if (f === "numeroConteneur") return (form.numeroConteneur || "").length === 11;
     if (f === "nombreJours") return Number(form.nombreJours) >= 1;
@@ -323,6 +330,15 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
               {len}/11 — 4 lettres puis 7 chiffres
             </span>
           )}
+        </Field>
+      );
+    }
+    if (key === "sousType") {
+      return (
+        <Field label={label} required key={key}>
+          <select className={inputCls} style={inputStyle} value={form.sousType || "mise_a_terre"} onChange={(e) => set("sousType", e.target.value)}>
+            {SOUS_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
         </Field>
       );
     }
@@ -660,7 +676,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
       const statut = isOpPaid(o) ? `Payée (${o.factureNumero})` : o.facturee ? `Facturée (${o.factureNumero})` : "Non facturée";
       return {
         "Date": o.date,
-        "Nature": natureLabel(o.nature),
+        "Nature": opNatureLabel(o),
         "N° Conteneur": o.numeroConteneur,
         "Type": o.typeConteneur,
         "N° Camion": o.numeroCamion || "",
@@ -791,7 +807,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                   {filtered.map((o) => (
                     <tr key={o.id} style={{ borderTop: `1px solid ${C.border}` }}>
                       <td className="px-1.5 py-2 whitespace-nowrap">{o.date}</td>
-                      <td className="px-1.5 py-2 whitespace-nowrap"><Badge tone="steel">{natureLabel(o.nature)}</Badge></td>
+                      <td className="px-1.5 py-2 whitespace-nowrap"><Badge tone="steel">{opNatureLabel(o)}</Badge></td>
                       <td className="px-1.5 py-2 whitespace-nowrap"><ContainerTag value={o.numeroConteneur} /></td>
                       <td className="px-1.5 py-2 whitespace-nowrap">{o.typeConteneur}</td>
                       <td className="px-1.5 py-2 whitespace-nowrap">{o.numeroCamion || "—"}</td>
@@ -817,7 +833,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                 <div key={o.id} className="p-3 space-y-2" style={{ borderTop: `1px solid ${C.border}` }}>
                   <div className="flex items-center justify-between gap-2">
                     <ContainerTag value={o.numeroConteneur} />
-                    <div className="flex items-center gap-2"><Badge tone="steel">{natureLabel(o.nature)}</Badge>{renderActions(o)}</div>
+                    <div className="flex items-center gap-2"><Badge tone="steel">{opNatureLabel(o)}</Badge>{renderActions(o)}</div>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span>{o.date} · {o.typeConteneur}</span>
@@ -1110,7 +1126,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
                       />
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{o.date}</td>
-                    <td className="px-3 py-2"><Badge tone="steel">{natureLabel(o.nature)}</Badge></td>
+                    <td className="px-3 py-2"><Badge tone="steel">{opNatureLabel(o)}</Badge></td>
                     <td className="px-3 py-2"><ContainerTag value={o.numeroConteneur} /></td>
                     <td className="px-3 py-2 whitespace-nowrap">{o.typeConteneur}</td>
                     <td className="px-3 py-2">
@@ -1172,7 +1188,7 @@ function NewInvoiceTab({ operations, tariffs, settings, onCreate, isAdmin }) {
                   const ref = o.nature === "immobilisation" ? `${o.nombreJours || 1} jour(s)` : o.odm ? `ODM: ${o.odm}` : "—";
                   return {
                     opId: o.id, numeroConteneur: o.numeroConteneur, typeConteneur: o.typeConteneur,
-                    destination: o.destination || "—", nature: o.nature, reference: ref,
+                    destination: o.destination || "—", nature: o.nature, sousType: o.sousType || null, reference: ref,
                     tarifSympos: l.tarifSympos, remise: l.remise, ht: l.ht, tva: l.tva, gfc: l.gfc, ttc: l.ttc,
                   };
                 });
@@ -1263,7 +1279,7 @@ function InvoiceDocument({ invoice, settings }) {
                 <td className="px-2 py-1.5 text-xs font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.typeConteneur}</td>
                 <td className="px-2 py-1.5 text-xs">{l.destination}</td>
-                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{opNatureLabel(l)}</Badge></td>
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
                 <td className="px-2 py-1.5 text-xs">{fmtPlain(l.ht)}</td>
                 <td className="px-2 py-1.5 text-xs">{tvaNatures.includes(l.nature) ? fmtPlain(l.tva) : "Exonéré"}</td>
@@ -1376,7 +1392,7 @@ function AvoirDocument({ avoir, settings }) {
                 <td className="px-2 py-1.5 text-xs font-bold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.03em" }}>{l.numeroConteneur || "—"}</td>
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.typeConteneur}</td>
                 <td className="px-2 py-1.5 text-xs">{l.destination}</td>
-                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                <td className="px-2 py-1.5 text-xs"><Badge tone="steel">{opNatureLabel(l)}</Badge></td>
                 <td className="px-2 py-1.5 text-xs whitespace-nowrap">{l.reference}</td>
                 <td className="px-2 py-1.5 text-xs">-{fmtPlain(l.ht)}</td>
                 <td className="px-2 py-1.5 text-xs">{tvaNatures.includes(l.nature) ? `-${fmtPlain(l.tva)}` : "Exonéré"}</td>
@@ -1584,7 +1600,7 @@ async function buildInvoicePdfBlob(invoice, settings) {
       numeroConteneur: l.numeroConteneur || "—",
       typeConteneur: l.typeConteneur || "",
       destination: l.destination || "",
-      nature: natureLabel(l.nature),
+      nature: opNatureLabel(l),
       reference: l.reference || "",
       ht: fmtPdfNumber(l.ht),
       tva: tvaNatures.includes(l.nature) ? fmtPdfNumber(l.tva) : "Exon.",
@@ -1805,7 +1821,7 @@ async function buildAvoirPdfBlob(avoir, settings) {
       numeroConteneur: l.numeroConteneur || "—",
       typeConteneur: l.typeConteneur || "",
       destination: l.destination || "",
-      nature: natureLabel(l.nature),
+      nature: opNatureLabel(l),
       reference: l.reference || "",
       ht: `-${fmtPdfNumber(l.ht)}`,
       tva: tvaNatures.includes(l.nature) ? `-${fmtPdfNumber(l.tva)}` : "Exon.",
@@ -2124,7 +2140,7 @@ function AvoirCreateModal({ invoice, onCreate, onClose }) {
                   <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
                     <td className="px-3 py-2"><input type="checkbox" checked={!!checked[i]} onChange={() => toggle(i)} /></td>
                     <td className="px-3 py-2 font-bold" style={{ fontFamily: "ui-monospace, monospace" }}>{l.numeroConteneur}</td>
-                    <td className="px-3 py-2"><Badge tone="steel">{natureLabel(l.nature)}</Badge></td>
+                    <td className="px-3 py-2"><Badge tone="steel">{opNatureLabel(l)}</Badge></td>
                     <td className="px-3 py-2 text-right font-semibold">{fmt(l.ttc)}</td>
                   </tr>
                 ))}
@@ -2186,7 +2202,7 @@ function InvoicesTab({ invoices, settings, isAdmin, onDelete, onMarkPaid, onCrea
     const XLSX = await import("xlsx");
     const rows = inv.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
-      "Nature": natureLabel(l.nature), "Référence": l.reference,
+      "Nature": opNatureLabel(l), "Référence": l.reference,
       "Montant HT": l.ht, "TVA": l.tva, "GFC (hors TVA)": l.gfc || 0, "Montant TTC": l.ttc,
     }));
     rows.push({});
@@ -2318,7 +2334,7 @@ function AvoirsTab({ avoirs, settings, isAdmin, onDelete }) {
     const XLSX = await import("xlsx");
     const rows = av.lines.map((l) => ({
       "N° Conteneur": l.numeroConteneur, "Type": l.typeConteneur, "Destination": l.destination,
-      "Nature": natureLabel(l.nature), "Référence": l.reference,
+      "Nature": opNatureLabel(l), "Référence": l.reference,
       "Montant HT": -l.ht, "TVA": -l.tva, "GFC (hors TVA)": -(l.gfc || 0), "Montant TTC": -l.ttc,
     }));
     rows.push({});
