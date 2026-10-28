@@ -647,6 +647,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
   const [odmQuery, setOdmQuery] = useState("");
   const [natureFilter, setNatureFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [picked, setPicked] = useState({}); // id -> true, operations ticked for Excel export
 
   const invoiceById = useMemo(() => Object.fromEntries((invoices || []).map((iv) => [iv.id, iv])), [invoices]);
   const chauffeurByNumero = useMemo(() => Object.fromEntries((trucks || []).map((t) => [t.numero, t.chauffeur])), [trucks]);
@@ -670,9 +671,20 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
     })
     .sort((a, b) => (b.date > a.date ? 1 : -1));
 
+  const pickedCount = operations.filter((o) => picked[o.id]).length;
+  const allFilteredPicked = filtered.length > 0 && filtered.every((o) => picked[o.id]);
+  const togglePick = (id) => setPicked((p) => ({ ...p, [id]: !p[id] }));
+  const toggleAllFiltered = () => setPicked((p) => {
+    const next = { ...p };
+    filtered.forEach((o) => { next[o.id] = !allFilteredPicked; });
+    return next;
+  });
+
   const exportOperationsExcel = async () => {
     const XLSX = await import("xlsx");
-    const rows = filtered.map((o) => {
+    // ticked operations win; with nothing ticked, export what the filters currently show
+    const toExport = pickedCount > 0 ? operations.filter((o) => picked[o.id]).sort((a, b) => (b.date > a.date ? 1 : -1)) : filtered;
+    const rows = toExport.map((o) => {
       const montant = getOpMontant(o);
       const statut = isOpPaid(o) ? `Payée (${o.factureNumero})` : o.facturee ? `Facturée (${o.factureNumero})` : "Non facturée";
       return {
@@ -786,8 +798,8 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
               <option value="facturee">Facturées (non payées)</option>
               <option value="non_facturee">Non facturées</option>
             </select>
-            <Btn small kind="ghost" icon={Download} disabled={filtered.length === 0} onClick={exportOperationsExcel}>
-              Exporter Excel
+            <Btn small kind="ghost" icon={Download} disabled={filtered.length === 0 && pickedCount === 0} onClick={exportOperationsExcel}>
+              {pickedCount > 0 ? `Exporter Excel (${pickedCount} sélectionnée${pickedCount > 1 ? "s" : ""})` : "Exporter Excel"}
             </Btn>
           </div>
 
@@ -796,6 +808,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
               <table className="w-full text-xs" style={{ tableLayout: "auto" }}>
                 <thead>
                   <tr style={{ background: C.steelSoft }}>
+                    <th className="px-1.5 py-2 w-6"><input type="checkbox" title="Tout sélectionner (liste affichée)" checked={allFilteredPicked} onChange={toggleAllFiltered} /></th>
                     {["Date", "Nature", "Conteneur", "Type", "N° camion", "Chauffeur", "Client", "Lieu / Destination", "Date fin / Durée", "Statut", ""].map((h) => (
                       <th key={h} className="text-left px-1.5 py-2 font-semibold uppercase" style={{ color: C.steel, fontSize: 10 }}>{h}</th>
                     ))}
@@ -803,10 +816,11 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={11} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</td></tr>
+                    <tr><td colSpan={12} className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</td></tr>
                   )}
                   {filtered.map((o) => (
-                    <tr key={o.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <tr key={o.id} style={{ borderTop: `1px solid ${C.border}`, background: picked[o.id] ? C.orangeSoft : "transparent" }}>
+                      <td className="px-1.5 py-2"><input type="checkbox" checked={!!picked[o.id]} onChange={() => togglePick(o.id)} /></td>
                       <td className="px-1.5 py-2 whitespace-nowrap">{o.date}</td>
                       <td className="px-1.5 py-2 whitespace-nowrap"><Badge tone="steel">{opNatureLabel(o)}</Badge></td>
                       <td className="px-1.5 py-2 whitespace-nowrap"><ContainerTag value={o.numeroConteneur} /></td>
@@ -831,9 +845,9 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
             <div className="md:hidden">
               {filtered.length === 0 && <div className="text-center py-8 text-sm" style={{ color: C.inkMuted }}>Aucune opération. Ajoutez-en une pour commencer.</div>}
               {filtered.map((o) => (
-                <div key={o.id} className="p-3 space-y-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                <div key={o.id} className="p-3 space-y-2" style={{ borderTop: `1px solid ${C.border}`, background: picked[o.id] ? C.orangeSoft : "transparent" }}>
                   <div className="flex items-center justify-between gap-2">
-                    <ContainerTag value={o.numeroConteneur} />
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={!!picked[o.id]} onChange={() => togglePick(o.id)} /><ContainerTag value={o.numeroConteneur} /></label>
                     <div className="flex items-center gap-2"><Badge tone="steel">{opNatureLabel(o)}</Badge>{renderActions(o)}</div>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-sm">
