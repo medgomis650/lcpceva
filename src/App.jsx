@@ -258,7 +258,7 @@ function clearOperationDraft() {
   try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
 }
 
-function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave }) {
+function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave, isAdmin }) {
   // Only new-entry forms (not edits of an existing operation) keep a draft —
   // this is what survives an accidental tab switch / brief disconnect so
   // nothing typed is ever lost.
@@ -279,7 +279,9 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
   const localites = useMemo(() => [...new Set(tariffs.map((t) => t.localite))].sort(), [tariffs]);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const fields = NATURE_FIELDS[nature];
+  // Non-admin on an already-invoiced operation: only the Sympos locality can be corrected.
+  const localiteOnly = !!initial?.facturee && !isAdmin;
+  const fields = localiteOnly ? ["localiteTarifaire"] : NATURE_FIELDS[nature];
   const isDuplicateContainer = useMemo(() => {
     if (nature === "immobilisation") return false; // seul cas où un conteneur déjà facturé peut être ressaisi
     const num = (form.numeroConteneur || "").trim().toUpperCase();
@@ -354,10 +356,15 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
       );
     }
     if (key === "localiteTarifaire") {
+      // Real dropdown (a <datalist> only suggests entries matching the current text, so the
+      // other localities were invisible once a value was filled in).
+      const opts = form.localiteTarifaire && !localites.includes(form.localiteTarifaire) ? [form.localiteTarifaire, ...localites] : localites;
       return (
         <Field label={label} required key={key}>
-          <input list="localites" className={inputCls} style={inputStyle} value={form.localiteTarifaire} onChange={(e) => set("localiteTarifaire", e.target.value)} placeholder="ex: Dakar Port" />
-          <datalist id="localites">{localites.map((l) => <option key={l} value={l} />)}</datalist>
+          <select className={inputCls} style={inputStyle} value={form.localiteTarifaire || ""} onChange={(e) => set("localiteTarifaire", e.target.value)}>
+            <option value="">— Sélectionner —</option>
+            {opts.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
           {localites.length === 0 && <span className="text-xs" style={{ color: C.amber }}>Aucun tarif Sympos configuré — onglet "Tarifs Sympos"</span>}
         </Field>
       );
@@ -407,7 +414,7 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
   };
   const handleSave = () => {
     if (!initial) clearOperationDraft();
-    onSave({ ...form, nature });
+    onSave(localiteOnly ? { id: initial.id, localiteTarifaire: form.localiteTarifaire } : { ...form, nature });
   };
 
   return (
@@ -423,7 +430,8 @@ function OperationForm({ initial, tariffs, trucks, operations, onCancel, onSave 
         </div>
       )}
 
-      <div className="mb-4">
+      {localiteOnly && <div className="text-xs rounded-md px-3 py-2 mb-4" style={{ background: C.amberSoft, color: C.amber }}>Opération déjà facturée ({initial.factureNumero}) : seule la localité Sympos peut être modifiée. La facture sera mise à jour automatiquement.</div>}
+      <div className="mb-4" style={localiteOnly ? { display: "none" } : undefined}>
         <span className="text-xs font-semibold uppercase tracking-wide block mb-2" style={{ color: C.inkMuted }}>Type d'opération *</span>
         <div className="flex flex-wrap gap-2">
           {NATURES.map((n) => (
@@ -742,6 +750,11 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
                                 className="p-1.5 rounded hover:opacity-70" style={{ color: C.red }}
                               ><Trash2 size={14} /></button>
                             </>
+                          ) : sympNatures.includes(o.nature) ? (
+                            <>
+                              <button title="Modifier la localité Sympos (facture mise à jour automatiquement)" onClick={() => setEditing(o)} className="p-1.5 rounded hover:opacity-70" style={{ color: C.amber }}><Pencil size={14} /></button>
+                              <span title="Verrouillée (déjà facturée)" style={{ color: C.inkMuted }} className="p-1.5"><Lock size={14} /></span>
+                            </>
                           ) : (
                             <span title="Verrouillée (déjà facturée)" style={{ color: C.inkMuted }}><Lock size={14} /></span>
                           )}
@@ -773,6 +786,7 @@ function OperationsTab({ operations, tariffs, trucks, invoices, onAdd, onUpdate,
           trucks={trucks}
           operations={operations}
           onCancel={() => setEditing(null)}
+          isAdmin={isAdmin}
           onSave={(op) => { onUpdate(op); setEditing(null); }}
         />
       )}
