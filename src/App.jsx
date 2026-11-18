@@ -2614,7 +2614,46 @@ export default function App() {
     setOperations(next); await saveKey("ceva-operations", next); notify("Opération enregistrée");
   };
   const updateOperation = async (op) => {
-    const next = operations.map((o) => (o.id === op.id ? { ...o, ...op } : o));
+    const old = operations.find((o) => o.id === op.id);
+    const merged = { ...old, ...op };
+    const next = operations.map((o) => (o.id === op.id ? merged : o));
+    // Already-invoiced operation (admin edit): carry the change into its invoice line and totals.
+    const inv = old?.facturee ? invoices.find((i) => i.id === old.factureId) : null;
+    if (inv) {
+      const priceChanged = sympNatures.includes(merged.nature)
+        ? merged.localiteTarifaire !== old.localiteTarifaire || merged.typeConteneur !== old.typeConteneur
+        : merged.nature === "immobilisation"
+          ? Number(merged.nombreJours) !== Number(old.nombreJours)
+          : String(merged.tarifManuel) !== String(old.tarifManuel);
+      let newBase = null;
+      if (priceChanged) {
+        if (sympNatures.includes(merged.nature)) newBase = lookupSympos(tariffs, merged.localiteTarifaire, merged.typeConteneur);
+        else if (merged.nature === "immobilisation") newBase = IMMOBILISATION_AMOUNT * (Number(merged.nombreJours) || 1);
+        else newBase = Number(merged.tarifManuel) || 0;
+        if (newBase === null || newBase === undefined) {
+          notify("⚠ Aucun tarif Sympos pour cette localité : modification annulée");
+          return;
+        }
+      }
+      const lines = inv.lines.map((l) => {
+        if (l.opId !== merged.id) return l;
+        const gfc = l.gfc || 0;
+        const upd = { ...l, numeroConteneur: merged.numeroConteneur, typeConteneur: merged.typeConteneur, destination: merged.destination || "—" };
+        if (merged.nature === "immobilisation") upd.reference = `${merged.nombreJours || 1} jour(s)`;
+        else if (merged.odm) upd.reference = `ODM: ${merged.odm}`;
+        if (priceChanged) {
+          const c = computeLine(merged, newBase);
+          Object.assign(upd, { tarifSympos: c.tarifSympos, remise: c.remise, ht: c.ht, tva: c.tva, ttc: c.ttc + gfc });
+        }
+        return upd;
+      });
+      const totals = lines.reduce((acc, l) => { acc.ht += l.ht; acc.tva += l.tva; acc.gfc += l.gfc || 0; acc.ttc += l.ttc; return acc; }, { ht: 0, tva: 0, gfc: 0, ttc: 0 });
+      const nextInvoices = invoices.map((i) => (i.id === inv.id ? { ...i, lines, totals: { ...i.totals, ...totals } } : i));
+      setOperations(next); setInvoices(nextInvoices);
+      const ok = await Promise.all([saveKey("ceva-operations", next), saveKey("ceva-invoices", nextInvoices)]);
+      notify(ok.every(Boolean) ? `Opération modifiée — facture ${inv.numero} mise à jour` : "⚠ Modification non enregistrée en ligne : réessayez");
+      return;
+    }
     setOperations(next); await saveKey("ceva-operations", next); notify("Opération modifiée");
   };
   const deleteOperation = async (id) => {
