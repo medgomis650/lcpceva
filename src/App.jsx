@@ -74,7 +74,7 @@ const NATURE_FIELDS = {
   export: ["date", "odm", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "destination", "client", "localiteTarifaire"],
   transfert: ["date", "typeConteneur", "numeroConteneur", "numeroCamion", "lieuPriseEnCharge", "pleinVide", "tarifManuel"],
   mise_a_terre: ["sousType", "date", "odm", "lieuPriseEnCharge", "destination", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "pleinVide", "tarifManuel"],
-  immobilisation: ["date", "numeroConteneur", "typeConteneur", "client", "nombreJours"],
+  immobilisation: ["date", "numeroConteneur", "typeConteneur", "numeroCamion", "client", "nombreJours"],
 };
 
 const CONTAINER_TYPES = ["20 DV", "40 DV", "40 HC", "20 RE", "40 RE", "20 OT", "40 OT", "20 FR", "40 FR"];
